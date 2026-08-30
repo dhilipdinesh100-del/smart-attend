@@ -30,9 +30,11 @@ for directory in [DATA_DIR, QR_DIR, FACES_DIR, MODEL_DIR, PRIVATE_DIR, BACKUP_DI
 SECRET_KEY = os.environ.get("SECRET_KEY", "smartattend-prod-secret-984729487-key")
 QR_SECRET_SALT = os.environ.get("QR_SECRET_SALT", SECRET_KEY)
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "0").lower() in ("1", "true", "yes")
+# SameSite=None + Secure=True enables seamless authentication when embedded in cross-origin iframes (e.g. GitHub Pages)
+SESSION_COOKIE_SAMESITE = os.environ.get("SESSION_COOKIE_SAMESITE", "None")
+SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "1").lower() in ("1", "true", "yes")
 PERMANENT_SESSION_LIFETIME = 86400 # 24 hours
+
 
 # Server Host and Debug Settings (Production debug is OFF by default)
 HOST = os.environ.get("HOST", "0.0.0.0")

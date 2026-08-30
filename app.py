@@ -41,8 +41,22 @@ def csrf_protection():
     # Only validate CSRF on state-changing methods
     security.validate_csrf()
 
+# Configure cookies for cross-origin iframe embedding compatibility (e.g. GitHub Pages)
+@app.after_request
+def configure_cross_origin_session_cookies(response):
+    """Ensure cross-site iframe compatibility by adding Partitioned attribute (CHIPS) to session cookies."""
+    cookies = response.headers.getlist("Set-Cookie")
+    if cookies:
+        response.headers.remove("Set-Cookie")
+        for cookie in cookies:
+            if "session=" in cookie and "SameSite=None" in cookie and "Partitioned" not in cookie:
+                cookie = f"{cookie}; Partitioned"
+            response.headers.add("Set-Cookie", cookie)
+    return response
+
 # Global template context processor
 @app.context_processor
+
 def inject_global_context():
     settings = database.get_all_settings()
     user_id = session.get("user_id")

@@ -21,9 +21,11 @@ class ProductionDeploymentTests(unittest.TestCase):
     def test_03_cookie_security_and_session_settings(self):
         """Verify secure cookie settings for production sessions."""
         self.assertTrue(app_module.app.config["SESSION_COOKIE_HTTPONLY"])
-        self.assertEqual(app_module.app.config["SESSION_COOKIE_SAMESITE"], "Lax")
+        self.assertIn(app_module.app.config["SESSION_COOKIE_SAMESITE"], ["None", "Lax"])
+        self.assertTrue(app_module.app.config["SESSION_COOKIE_SECURE"])
         self.assertIsNotNone(app_module.app.secret_key)
         self.assertGreaterEqual(len(app_module.app.secret_key), 16)
+
 
     def test_04_requirements_txt_contains_production_deps(self):
         """Verify requirements.txt contains gunicorn and all core production dependencies."""
