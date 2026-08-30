@@ -8,7 +8,11 @@ __pycache__/
 
 # Environment & Secrets
 .env
-.env.*
+.env.local
+.env.*.local
+.env.development
+.env.production
+!.env.example
 .venv/
 venv/
 ENV/
