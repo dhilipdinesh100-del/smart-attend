@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block page_subtitle %}Live metrics, attendance analytics, and real-time activity stream{% endblock %}
+
+{% block content %}
+<!-- Top Welcome & Overview Banner -->
+<div class="welcome-banner">
+  <div>
+    <div class="welcome-title">Welcome to SmartAttend Dashboard</div>
+    <div class="welcome-subtitle">
+      Today is <strong>{{ now.strftime('%A, %B %d, %Y') }}</strong> &bull; All systems operational.
+    </div>
+  </div>
+  <div class="welcome-actions">
+    <a href="{{ url_for('register_student_page') }}" class="btn btn-primary btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Register Student</span>
+    </a>
+    <a href="{{ url_for('daily_attendance_page') }}" class="btn btn-secondary btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/></svg>
+      <span>Daily Audit</span>
+    </a>
+  </div>
+</div>
+
+<!-- 6 Statistics Cards Grid -->
+<div class="kpi-grid">
+  <!-- Total Students -->
+  <div class="kpi-card primary">
+    <div class="kpi-header">
+      <span class="kpi-title">Total Students</span>
+      <div class="kpi-icon-wrap primary">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-total-students">{{ stats.total_students }}</div>
+    <div class="kpi-footer">Enrolled in database</div>
+  </div>
+
+  <!-- Present Today -->
+  <div class="kpi-card success">
+    <div class="kpi-header">
+      <span class="kpi-title">Present Today</span>
+      <div class="kpi-icon-wrap success">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-today-present" style="color: #34d399;">{{ stats.today_present }}</div>
+    <div class="kpi-footer">Verified check-ins today</div>
+  </div>
+
+  <!-- Absent Today -->
+  <div class="kpi-card danger">
+    <div class="kpi-header">
+      <span class="kpi-title">Absent Today</span>
+      <div class="kpi-icon-wrap danger">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-today-absent" style="color: #fb7185;">{{ stats.today_absent }}</div>
+    <div class="kpi-footer">Unmarked students</div>
+  </div>
+
+  <!-- Attendance % -->
+  <div class="kpi-card warning">
+    <div class="kpi-header">
+      <span class="kpi-title">Attendance %</span>
+      <div class="kpi-icon-wrap warning">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-attendance-rate">{{ stats.attendance_rate }}%</div>
+    <div class="kpi-footer">Today's turnout rate</div>
+  </div>
+
+  <!-- Face Attendance -->
+  <div class="kpi-card info">
+    <div class="kpi-header">
+      <span class="kpi-title">Face Attendance</span>
+      <div class="kpi-icon-wrap info">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-face-today" style="color: #38bdf8;">{{ stats.face_today }}</div>
+    <div class="kpi-footer">Total Face logs: <b id="stat-face-total">{{ stats.face_total }}</b></div>
+  </div>
+
+  <!-- QR Attendance -->
+  <div class="kpi-card purple">
+    <div class="kpi-header">
+      <span class="kpi-title">QR Attendance</span>
+      <div class="kpi-icon-wrap purple">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-qr-today" style="color: #c084fc;">{{ stats.qr_today }}</div>
+    <div class="kpi-footer">Total QR logs: <b id="stat-qr-total">{{ stats.qr_total }}</b></div>
+  </div>
+
+  <!-- Manual Attendance -->
+  <div class="kpi-card teal">
+    <div class="kpi-header">
+      <span class="kpi-title">Manual Logs</span>
+      <div class="kpi-icon-wrap teal">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
+    </div>
+    <div class="kpi-value" id="stat-manual-today" style="color: #2dd4bf;">{{ stats.manual_today }}</div>
+    <div class="kpi-footer">Total Manual: <b id="stat-manual-total">{{ stats.manual_total }}</b></div>
+  </div>
+</div>
+
+<!-- Quick Actions Shortcuts -->
+<div class="card" style="margin-bottom: 24px;">
+  <div class="card-header">
+    <div class="card-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Quick Actions
+    </div>
+  </div>
+  <div class="quick-actions-grid">
+    <a href="{{ url_for('register_student_page') }}" class="quick-action-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+      <span>Register Student</span>
+    </a>
+    <a href="{{ url_for('train_model_page') }}" class="quick-action-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="M12 2v4"/></svg>
+      <span>Train Face Model</span>
+    </a>
+    <a href="{{ url_for('face_attendance_page') }}" class="quick-action-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+      <span>Start Face Attendance</span>
+    </a>
+    <a href="{{ url_for('qr_attendance_page') }}" class="quick-action-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/></svg>
+      <span>Start QR Attendance</span>
+    </a>
+    <a href="{{ url_for('daily_attendance_page') }}" class="quick-action-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/></svg>
+      <span>Daily Attendance</span>
+    </a>
+    <a href="{{ url_for('monthly_attendance_page') }}" class="quick-action-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+      <span>Monthly Report</span>
+    </a>
+  </div>
+</div>
+
+<!-- Charts Row -->
+<div class="dashboard-grid-2">
+  <!-- 7-Day Trend Chart -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        Attendance Trend (Last 7 Days)
+      </div>
+    </div>
+    <div style="height: 250px; position: relative;">
+      <canvas id="trendChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Attendance by Method Donut -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+        Attendance by Method
+      </div>
+    </div>
+    <div style="height: 250px; position: relative;">
+      <canvas id="methodChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Attendance Stream & Top Students Row -->
+<div class="dashboard-grid-2">
+  <!-- Recent Attendance -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+        Recent Attendance
+      </div>
+      <a href="{{ url_for('attendance_history_page') }}" class="btn btn-secondary btn-sm">View Full History</a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Roll Number</th>
+            <th>Method</th>
+            <th>Time</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="recent-attendance-tbody">
+          {% if stats.recent_records %}
+            {% for r in stats.recent_records %}
+              <tr>
+                <td><span style="font-weight: 600;">{{ r.name }}</span></td>
+                <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);">{{ r.roll_no }}</span></td>
+                <td>
+                  <span class="badge {% if r.method == 'FACE' %}badge-face{% elif r.method == 'QR' %}badge-qr{% else %}badge-manual{% endif %}">
+                    {{ r.method }}
+                  </span>
+                </td>
+                <td><span style="font-size: 12.5px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ r.time }}</span></td>
+                <td><span class="badge badge-present">PRESENT</span></td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="empty-state">
+                <p style="margin: 0;">No attendance records recorded yet today.</p>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Top Attendees -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        Top Attendees
+      </div>
+    </div>
+    <div>
+      {% if top_students %}
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          {% for st in top_students %}
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--bg-card-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+              <div>
+                <div style="font-weight: 600; font-size: 13.5px; color: #ffffff;">{{ st.name }}</div>
+                <div style="font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ st.roll_no }}</div>
+              </div>
+              <span class="badge badge-present">{{ st.attendance_count }} Days</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state" style="padding: 24px 12px;">
+          <p style="margin: 0;">No attendee rankings available yet.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+  window.dashboardData = {
+    stats: {{ stats | tojson }},
+    trends: {{ trends | tojson }}
+  };
+</script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

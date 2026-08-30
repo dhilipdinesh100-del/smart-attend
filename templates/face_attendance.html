@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Real-Time Face Attendance{% endblock %}
+{% block page_title %}Face Recognition Scanner{% endblock %}
+{% block page_subtitle %}Live contactless attendance check-in powered by OpenCV LBPH Facial Recognition{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid-2">
+  <!-- Left Column: Live Scanner -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        Live Optical Feed
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span class="badge {% if model_ready %}badge-ready{% else %}badge-absent{% endif %}">
+          {% if model_ready %}Model Active (Threshold: {{ conf_thresh }}){% else %}Model Missing — Train First{% endif %}
+        </span>
+        <div class="system-status-pill" id="scannerStatusPill">
+          <span class="pulse-dot" id="scannerPulseDot"></span>
+          <span id="scannerStatusPillText">Connecting...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Centered Large Camera Viewport -->
+    <div class="scanner-viewport" id="scannerViewport">
+      <img src="{{ url_for('video_feed_face') }}" alt="Face Recognition Stream" class="scanner-video" id="faceVideoFeed" onload="onFeedLoaded()" onerror="onFeedError()">
+    </div>
+
+    <!-- Controls -->
+    <div style="margin-top: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+      <div style="color: var(--text-muted); font-size: 13px;">
+        Position face inside the frame. Attendance is recorded automatically once per student per day.
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleScanner" onclick="toggleFaceScanner()">
+          <span id="btnToggleText">Stop Camera</span>
+        </button>
+        <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline btn-sm" onclick="stopFaceScanner()">
+          <span>Exit</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Real-time Recognition Status & Live Activity Table -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Live Recognition Status Banner -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Recognition Status
+        </div>
+      </div>
+
+      <div id="liveDetectionStatus" class="scanner-status-banner">
+        <div style="font-weight: 600; color: var(--text-muted);">Optical Sensor Initializing...</div>
+        <div style="font-size: 12.5px; color: var(--text-dim); margin-top: 4px;">Connecting to camera and scanning for registered faces...</div>
+      </div>
+    </div>
+
+    <!-- Live Activity Table -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+          Live Verified Check-ins
+        </div>
+        <a href="{{ url_for('daily_attendance_page') }}" class="btn btn-secondary btn-sm">Daily Audit</a>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Roll Number</th>
+              <th>Time</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="faceLiveFeedTable">
+            {% if recent %}
+              {% for r in recent %}
+                <tr>
+                  <td style="font-weight: 600;">{{ r.name }}</td>
+                  <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);">{{ r.roll_no }}</span></td>
+                  <td><span style="font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ r.time }}</span></td>
+                  <td><span class="badge badge-present">PRESENT</span></td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="4">
+                  <div class="empty-state" style="padding: 20px 10px;">
+                    <p style="margin: 0;">No attendance records recorded yet today.</p>
+                  </div>
+                </td>
+              </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let scannerActive = true;
+let facePollInterval = null;
+
+function onFeedLoaded() {
+  if (scannerActive) {
+    document.getElementById('scannerStatusPillText').textContent = 'Scanner Online';
+    document.getElementById('scannerPulseDot').style.display = 'inline-block';
+    document.getElementById('scannerPulseDot').style.background = '#34d399';
+    const statusBox = document.getElementById('liveDetectionStatus');
+    if (statusBox && statusBox.textContent.includes('Initializing')) {
+      statusBox.innerHTML = `
+        <div style="font-weight: 600; color: #34d399;">Optical Sensor Active</div>
+        <div style="font-size: 12.5px; color: var(--text-dim); margin-top: 4px;">Scanning live video feed for registered biometric faces...</div>
+      `;
+    }
+  }
+}
+
+function onFeedError() {
+  document.getElementById('scannerStatusPillText').textContent = 'Camera Offline';
+  document.getElementById('scannerPulseDot').style.display = 'inline-block';
+  document.getElementById('scannerPulseDot').style.background = '#fb7185';
+}
+
+function stopFaceScanner() {
+  scannerActive = false;
+  const feed = document.getElementById('faceVideoFeed');
+  if (feed) {
+    feed.src = '';
+  }
+  document.getElementById('scannerStatusPillText').textContent = 'Scanner Offline';
+  document.getElementById('scannerPulseDot').style.display = 'none';
+  document.getElementById('btnToggleText').textContent = 'Start Camera';
+  
+  if (facePollInterval) {
+    clearInterval(facePollInterval);
+    facePollInterval = null;
+  }
+  fetch('/api/camera/stop', { method: 'POST', keepalive: true }).catch(() => {});
+}
+
+function startFaceScanner() {
+  scannerActive = true;
+  const feed = document.getElementById('faceVideoFeed');
+  if (feed) {
+    feed.src = "{{ url_for('video_feed_face') }}?t=" + Date.now();
+  }
+  document.getElementById('scannerStatusPillText').textContent = 'Connecting...';
+  document.getElementById('scannerPulseDot').style.display = 'inline-block';
+  document.getElementById('scannerPulseDot').style.background = '#fbbf24';
+  document.getElementById('btnToggleText').textContent = 'Stop Camera';
+  startFacePolling();
+}
+
+function toggleFaceScanner() {
+  if (scannerActive) {
+    stopFaceScanner();
+  } else {
+    startFaceScanner();
+  }
+}
+
+function startFacePolling() {
+  if (facePollInterval) clearInterval(facePollInterval);
+
+  facePollInterval = setInterval(async () => {
+    if (!scannerActive) return;
+    try {
+      const res = await fetch('/api/dashboard');
+      const data = await res.json();
+      if (data.status === 'success') {
+        const event = data.last_detection;
+        const statusBox = document.getElementById('liveDetectionStatus');
+        
+        if (event && event.message && event.status) {
+          if (event.status === 'MARKED') {
+            statusBox.className = 'scanner-status-banner success';
+            statusBox.innerHTML = `
+              <div style="font-weight: 800; font-size: 15px; letter-spacing: -0.2px;">✓ Attendance Marked</div>
+              <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${event.student.name} (${event.student.roll_no})</div>
+              <div style="font-size: 12px; color: #a7f3d0; margin-top: 2px;">Method: Face Recognition &bull; ${event.record ? event.record.time : ''}</div>
+            `;
+          } else if (event.status === 'ALREADY_MARKED') {
+            statusBox.className = 'scanner-status-banner warning';
+            statusBox.innerHTML = `
+              <div style="font-weight: 800; font-size: 15px;">⚠ Already Marked Today</div>
+              <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${event.student.name} (${event.student.roll_no})</div>
+              <div style="font-size: 12px; color: #fde68a; margin-top: 2px;">Check-in already logged for today</div>
+            `;
+          } else if (event.status === 'NOT_FOUND') {
+            statusBox.className = 'scanner-status-banner danger';
+            statusBox.innerHTML = `
+              <div style="font-weight: 800; font-size: 15px;">✗ Face Not Recognized</div>
+              <div style="font-size: 12.5px; color: #ffe4e6; margin-top: 4px;">Unknown face or confidence below threshold</div>
+            `;
+          }
+        }
+
+        // Update feed table
+        const tbody = document.getElementById('faceLiveFeedTable');
+        if (tbody && data.stats.recent_records && data.stats.recent_records.length > 0) {
+          tbody.innerHTML = data.stats.recent_records.map(r => `
+            <tr>
+              <td style="font-weight: 600;">${r.name}</td>
+              <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);">${r.roll_no}</span></td>
+              <td><span style="font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">${r.time}</span></td>
+              <td><span class="badge badge-present">PRESENT</span></td>
+            </tr>
+          `).join('');
+        }
+      }
+    } catch (e) {
+      console.warn('Face scanner poll error:', e);
+    }
+  }, 2000);
+}
+
+startFacePolling();
+
+window.addEventListener('pagehide', stopFaceScanner);
+window.addEventListener('beforeunload', stopFaceScanner);
+</script>
+{% endblock %}

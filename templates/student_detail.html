@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}{{ student.name }} — Student Profile{% endblock %}
+{% block page_title %}{{ student.name }}{% endblock %}
+{% block page_subtitle %}Student Profile, Digital QR Pass, and Biometric Registration Overview{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid-2">
+  <!-- Left Column: Student QR Pass Card -->
+  <div class="card" style="display: flex; flex-direction: column; align-items: center; text-align: center;">
+    <div style="width: 68px; height: 68px; border-radius: 50%; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700; color: #ffffff; margin-bottom: 14px; box-shadow: var(--shadow-glow);">
+      {{ student.name[0] }}
+    </div>
+
+    <h2 style="font-size: 20px; font-weight: 800; color: #ffffff; margin-bottom: 4px; letter-spacing: -0.3px;">{{ student.name }}</h2>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 13.5px; color: var(--text-secondary); margin-bottom: 20px;">
+      Roll No: <strong style="color: #ffffff;">{{ student.roll_no }}</strong> &bull; Student ID: <strong style="color: #818cf8;">#{{ student.student_id_code or student.id }}</strong>
+    </div>
+
+    <!-- Large Centered QR Code Card -->
+    <div style="background: #ffffff; padding: 20px; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); margin-bottom: 24px; text-align: center; border: 1px solid rgba(255,255,255,0.2);">
+      <img src="{{ url_for('view_qr_page', student_id=student.id) }}?raw=1" alt="QR Pass for {{ student.name }}" style="width: 210px; height: 210px; display: block; border-radius: var(--radius-xs);">
+    </div>
+
+    <!-- Action Buttons -->
+    <div style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;">
+      <a href="{{ url_for('download_qr_file', student_id=student.id) }}" class="btn btn-primary btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Download QR</span>
+      </a>
+      <a href="{{ url_for('print_qr_page', student_id=student.id) }}" target="_blank" class="btn btn-secondary btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+        <span>Print QR</span>
+      </a>
+      <a href="{{ url_for('face_capture_page', student_id=student.id) }}" class="btn btn-secondary btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        <span>Capture Face</span>
+      </a>
+      <a href="{{ url_for('students_page') }}" class="btn btn-outline btn-sm">
+        <span>&larr; Back to Students</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Right Column: Status & Monthly Summary -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Biometrics & Credentials Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Biometric & Verification Status
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div style="background: var(--bg-card-subtle); padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="font-size: 11.5px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Facial Dataset</div>
+          <div style="font-size: 20px; font-weight: 800; color: #ffffff;">{{ face_count }} / 30 Samples</div>
+          <div style="margin-top: 8px;">
+            <span class="badge {% if face_count >= 10 %}badge-ready{% elif face_count > 0 %}badge-pending{% else %}badge-absent{% endif %}">
+              {% if face_count >= 10 %}Ready for Recognition{% elif face_count > 0 %}Partial Dataset{% else %}Pending Capture{% endif %}
+            </span>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-card-subtle); padding: 16px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="font-size: 11.5px; color: var(--text-muted); font-weight: 700; text-transform: uppercase; margin-bottom: 6px;">Registration Date</div>
+          <div style="font-size: 14.5px; font-weight: 600; color: #ffffff; font-family: 'JetBrains Mono', monospace;">{{ student.created_at }}</div>
+          <div style="margin-top: 8px;">
+            <span class="badge badge-ready">Active Student</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Monthly Summary Overview -->
+    {% if monthly_summary and monthly_summary.student_data %}
+      {% set ms = monthly_summary.student_data %}
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/></svg>
+            This Month's Summary ({{ monthly_summary.year_month }})
+          </div>
+          <a href="{{ url_for('monthly_attendance_page', student_id=student.id) }}" class="btn btn-secondary btn-sm">Full Calendar</a>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+          <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Present Days</div>
+            <div style="font-size: 22px; font-weight: 800; color: #34d399; margin-top: 4px;">{{ ms.present_days }}</div>
+          </div>
+          <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Absent Days</div>
+            <div style="font-size: 22px; font-weight: 800; color: #fb7185; margin-top: 4px;">{{ ms.absent_days }}</div>
+          </div>
+          <div style="background: var(--bg-card-subtle); padding: 14px; border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border-subtle);">
+            <div style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Turnout %</div>
+            <div style="font-size: 22px; font-weight: 800; color: #818cf8; margin-top: 4px;">{{ ms.attendance_percentage }}%</div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

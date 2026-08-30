@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Login — {{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 30%, rgba(99, 102, 241, 0.15) 0%, #090d16 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .login-box {
+      width: 100%;
+      max-width: 420px;
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(12px);
+    }
+    .login-header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-brand-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px auto;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 0 24px rgba(99, 102, 241, 0.35);
+    }
+    .login-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.4px;
+      margin-bottom: 4px;
+    }
+    .login-sub {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <div class="login-header">
+      <div class="login-brand-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="m9 12 2 2 4-4"/>
+        </svg>
+      </div>
+      <h1 class="login-title">{{ app_name }}</h1>
+      <p class="login-sub">Administrator Authentication Portal</p>
+    </div>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="margin-bottom: 20px;">
+          {% for category, message in messages %}
+            <div class="scanner-status-banner {% if category == 'success' %}success{% elif category == 'error' or category == 'danger' %}danger{% else %}warning{% endif %}" style="padding: 12px 14px; font-size: 13px; text-align: left; margin-bottom: 8px;">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('login_page') }}" data-loading-text="Authenticating...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ next_url or '' }}">
+
+      <div class="form-group">
+        <label class="form-label" for="usernameInput">Username or Email <span class="req">*</span></label>
+        <input type="text" id="usernameInput" name="username" class="form-control" placeholder="Enter username or email" required autofocus autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="passwordInput">Password <span class="req">*</span></label>
+        <input type="password" id="passwordInput" name="password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+      </div>
+
+      <div style="margin-top: 24px;">
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 14.5px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+          <span>Sign In to SmartAttend</span>
+        </button>
+      </div>
+
+      <div style="margin-top: 24px; text-align: center; font-size: 13.5px; color: #94a3b8; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 20px;">
+        New administrator?
+        <a href="{{ url_for('register_admin_page') }}" style="color: #818cf8; font-weight: 600; text-decoration: none; margin-left: 4px;">Create Admin Account</a>
+      </div>
+    </form>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

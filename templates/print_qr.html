@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartAttend QR Pass — {{ student.name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body {
+      background: #f8fafc;
+      color: #0f172a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+    .print-card-box {
+      background: #ffffff;
+      border: 2px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 40px;
+      width: 360px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
+    }
+    .print-brand {
+      font-size: 22px;
+      font-weight: 800;
+      color: #4f46e5;
+      letter-spacing: -0.5px;
+      margin-bottom: 2px;
+    }
+    .print-tagline {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 24px;
+    }
+    .print-name {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 4px;
+      letter-spacing: -0.3px;
+    }
+    .print-roll {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: #475569;
+      font-weight: 600;
+      margin-bottom: 22px;
+    }
+    .qr-container-box {
+      background: #f8fafc;
+      padding: 18px;
+      border-radius: 14px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 22px;
+      display: inline-block;
+    }
+    .qr-container-box img {
+      width: 220px;
+      height: 220px;
+      display: block;
+    }
+    .print-id-pill {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .no-print-toolbar {
+      margin-bottom: 24px;
+      display: flex;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print-toolbar">
+    <button onclick="window.print()" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+      <span>Print QR</span>
+    </button>
+    <a href="{{ url_for('download_qr_file', student_id=student.id) }}" class="btn btn-secondary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span>Download QR</span>
+    </a>
+    <a href="{{ url_for('student_detail_page', student_id=student.id) }}" class="btn btn-outline">
+      <span>Back to Student</span>
+    </a>
+  </div>
+
+  <div class="print-card-box">
+    <div class="print-brand">SmartAttend</div>
+    <div class="print-tagline">Student Attendance Pass</div>
+
+    <div class="print-name">{{ student.name }}</div>
+    <div class="print-roll">Roll No: {{ student.roll_no }}</div>
+
+    <div class="qr-container-box">
+      <img src="{{ url_for('view_qr_page', student_id=student.id) }}" alt="QR Code">
+    </div>
+
+    <div class="print-id-pill">
+      Student ID: #{{ student.id }} &bull; SmartAttend Pass
+    </div>
+  </div>
+</body>
+</html>

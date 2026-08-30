@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance History{% endblock %}
+{% block page_title %}Attendance History Logs{% endblock %}
+{% block page_subtitle %}Searchable, filterable audit log of all recorded attendance entries across the institution{% endblock %}
+
+{% block content %}
+<div class="card">
+  <!-- Search & Filter Controls -->
+  <form method="GET" action="{{ url_for('attendance_history_page') }}" class="filter-bar">
+    <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; flex: 1;">
+      <!-- Search Input -->
+      <div style="min-width: 200px; flex: 1;">
+        <label class="form-label" for="histSearchInput">Search</label>
+        <div class="search-input-wrap">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="histSearchInput" name="search" class="form-control" placeholder="Search by student name or roll..." value="{{ search_query or '' }}">
+        </div>
+      </div>
+
+      <!-- Student Filter -->
+      <div style="min-width: 180px;">
+        <label class="form-label" for="histStudentSelect">Student</label>
+        <select id="histStudentSelect" name="student_id" class="form-control">
+          <option value="">All Students</option>
+          {% for s in all_students %}
+            <option value="{{ s.id }}" {% if student_id == s.id %}selected{% endif %}>{{ s.name }} ({{ s.roll_no }})</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Method Filter -->
+      <div style="min-width: 140px;">
+        <label class="form-label" for="histMethodSelect">Method</label>
+        <select id="histMethodSelect" name="method" class="form-control">
+          <option value="all" {% if method == 'all' %}selected{% endif %}>All Methods</option>
+          <option value="face" {% if method == 'face' %}selected{% endif %}>Face Recognition</option>
+          <option value="qr" {% if method == 'qr' %}selected{% endif %}>QR Code</option>
+        </select>
+      </div>
+
+      <!-- From Date -->
+      <div>
+        <label class="form-label" for="histStartDate">From Date</label>
+        <input type="date" id="histStartDate" name="start_date" class="form-control" value="{{ start_date or '' }}">
+      </div>
+
+      <!-- To Date -->
+      <div>
+        <label class="form-label" for="histEndDate">To Date</label>
+        <input type="date" id="histEndDate" name="end_date" class="form-control" value="{{ end_date or '' }}">
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <button type="submit" class="btn btn-secondary">Apply Filters</button>
+        <a href="{{ url_for('attendance_history_page') }}" class="btn btn-outline">Reset</a>
+        <a href="{{ url_for('export_attendance_csv', student_id=student_id or '', method=method or 'all', start_date=start_date or '', end_date=end_date or '', search=search_query or '') }}" class="btn btn-secondary" title="Export as CSV">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </a>
+      </div>
+    </div>
+  </form>
+
+  <!-- History Table -->
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Log #</th>
+          <th>Student Name</th>
+          <th>Roll Number</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Method</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if history.records %}
+          {% for r in history.records %}
+            <tr>
+              <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);">#{{ r.id }}</span></td>
+              <td>
+                <a href="{{ url_for('student_detail_page', student_id=r.student_id) }}" style="font-weight: 600; color: #ffffff; text-decoration: none;">
+                  {{ r.name }}
+                </a>
+              </td>
+              <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;">{{ r.roll_no }}</span></td>
+              <td><span style="font-size: 13px; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">{{ r.date }}</span></td>
+              <td><span style="font-size: 13px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ r.time }}</span></td>
+              <td>
+                <span class="badge {% if r.method == 'FACE' %}badge-face{% else %}badge-qr{% endif %}">
+                  {{ r.method }}
+                </span>
+              </td>
+              <td style="text-align: right;">
+                <button type="button" class="btn btn-danger btn-sm btn-delete-history"
+                        data-id="{{ r.id }}"
+                        data-name="{{ r.name }}"
+                        data-date="{{ r.date }}">
+                  Delete
+                </button>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <div class="empty-state-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+                </div>
+                <h3>No attendance history records found.</h3>
+                <p>No historical logs match your current filter parameters.</p>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal-backdrop" id="deleteHistModal">
+  <div class="modal-box">
+    <h3 class="modal-title" style="color: #fb7185;">Delete Attendance Log?</h3>
+    <p class="modal-desc">
+      Are you sure you want to delete the attendance log for <strong id="deleteHistStudentName" style="color: #ffffff;"></strong> on <span id="deleteHistDate" style="color: #ffffff;"></span>?
+      <br><br>
+      This attendance record will be permanently removed.
+    </p>
+    <form id="deleteHistForm" method="POST" action="" data-loading-text="Deleting Log...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next_url" value="{{ request.full_path }}">
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('deleteHistModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete Log</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.btn-delete-history').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const studentName = btn.getAttribute('data-name');
+      const dateStr = btn.getAttribute('data-date');
+      document.getElementById('deleteHistForm').action = '/attendance/delete/' + id;
+      document.getElementById('deleteHistStudentName').textContent = studentName;
+      document.getElementById('deleteHistDate').textContent = dateStr;
+      openModal('deleteHistModal');
+    });
+  });
+});
+</script>
+{% endblock %}

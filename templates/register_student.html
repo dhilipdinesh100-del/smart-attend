@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Register Student{% endblock %}
+{% block page_title %}Register Student{% endblock %}
+{% block page_subtitle %}Enroll a new student to create credentials, generate QR passes, and capture facial biometrics{% endblock %}
+
+{% block content %}
+<div style="max-width: 580px; margin: 0 auto;">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+        New Student Enrollment
+      </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('register_student_page') }}" data-loading-text="Registering Student...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="studentNameInput">Full Name <span class="req">*</span></label>
+        <input type="text" id="studentNameInput" name="name" class="form-control" placeholder="e.g. Eleanor Vance" value="{{ name or '' }}" required autofocus>
+        <div class="form-hint">Enter the student's legal first and last name.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="studentRollInput">Roll Number / Student ID <span class="req">*</span></label>
+        <input type="text" id="studentRollInput" name="roll_no" class="form-control" placeholder="e.g. CS2026-042" value="{{ roll_no or '' }}" required>
+        <div class="form-hint">Must be unique across the institution. A dedicated QR code will be generated immediately upon registration.</div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border-subtle);">
+        <a href="{{ url_for('students_page') }}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Register & Generate QR</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

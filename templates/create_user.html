@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Create New User{% endblock %}
+{% block page_title %}Create New User{% endblock %}
+{% block page_subtitle %}Add a new authorized administrator account to the system and audit registry{% endblock %}
+
+{% block content %}
+<div style="max-width: 680px; margin: 0 auto;">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+        New Administrator Credentials
+      </div>
+      <a href="{{ url_for('users_page') }}" class="btn btn-outline btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Back to Users</span>
+      </a>
+    </div>
+
+    <form method="POST" action="{{ url_for('new_user_page') }}" data-loading-text="Creating User...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="adminFullName">Full Name <span class="req">*</span></label>
+        <input type="text" id="adminFullName" name="full_name" class="form-control" placeholder="e.g. Dr. Eleanor Vance" value="{{ full_name or '' }}" required autofocus autocomplete="name">
+        <span class="form-hint">Enter the administrator's official full name.</span>
+      </div>
+
+      <div class="dashboard-grid-2" style="margin-bottom: 0;">
+        <div class="form-group">
+          <label class="form-label" for="adminUsername">Username <span class="req">*</span></label>
+          <input type="text" id="adminUsername" name="username" class="form-control" placeholder="e.g. evance" value="{{ username or '' }}" required autocomplete="username">
+          <span class="form-hint">3–30 chars, letters, numbers, underscores.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="adminEmail">Email Address <span class="req">*</span></label>
+          <input type="email" id="adminEmail" name="email" class="form-control" placeholder="e.g. evance@institution.edu" value="{{ email or '' }}" required autocomplete="email">
+          <span class="form-hint">Unique institutional email address.</span>
+        </div>
+      </div>
+
+      <div class="dashboard-grid-2" style="margin-bottom: 0;">
+        <div class="form-group">
+          <label class="form-label" for="adminPassword">Password <span class="req">*</span></label>
+          <input type="password" id="adminPassword" name="password" class="form-control" placeholder="••••••••" required autocomplete="new-password">
+          <span class="form-hint">Minimum 6 characters.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="adminConfirmPassword">Confirm Password <span class="req">*</span></label>
+          <input type="password" id="adminConfirmPassword" name="confirm_password" class="form-control" placeholder="••••••••" required autocomplete="new-password">
+          <span class="form-hint">Re-type identical password.</span>
+        </div>
+      </div>
+
+      <div style="margin-top: 28px; display: flex; gap: 12px; justify-content: flex-end;">
+        <a href="{{ url_for('users_page') }}" class="btn btn-outline">Cancel</a>
+        <button type="submit" class="btn btn-primary" style="padding-left: 24px; padding-right: 24px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+          <span>Create User</span>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

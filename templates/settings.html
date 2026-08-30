@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Settings & System Audit{% endblock %}
+{% block page_title %}System Settings & Admin Registry{% endblock %}
+{% block page_subtitle %}Configure biometric recognition parameters, optical sensors, and audit administrator accounts{% endblock %}
+
+{% block content %}
+<div style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px;">
+  <!-- System Settings Form Card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        System & Biometric Configuration
+      </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('settings_page') }}" data-loading-text="Saving Settings...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="appNameInput">Application Title <span class="req">*</span></label>
+        <input type="text" id="appNameInput" name="app_name" class="form-control" value="{{ settings.app_name or 'SmartAttend' }}" required>
+        <div class="form-hint">Displayed in header, navigation sidebar, and printable passes.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="faceConfInput">Face Confidence Threshold (LBPH Distance) <span class="req">*</span></label>
+        <input type="number" id="faceConfInput" name="face_confidence_threshold" class="form-control" value="{{ settings.face_confidence_threshold or '60' }}" min="20" max="120" step="1" required>
+        <div class="form-hint">Lower value enforces a stricter biometric match. Recommended value is between 50 and 70.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cameraIndexInput">Default Camera Sensor Index <span class="req">*</span></label>
+        <input type="number" id="cameraIndexInput" name="camera_index" class="form-control" value="{{ settings.camera_index or '0' }}" min="0" max="10" required>
+        <div class="form-hint">Index <code>0</code> represents default primary webcam. Use <code>1</code> or <code>2</code> for external USB cameras.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="cooldownInput">Recognition Cooldown (Seconds) <span class="req">*</span></label>
+        <input type="number" id="cooldownInput" name="recognition_cooldown" class="form-control" value="{{ settings.recognition_cooldown or '5' }}" min="1" max="60" required>
+        <div class="form-hint">Delay between consecutive attendance processing triggers for the same detected student in camera view.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="samplesInput">Target Face Samples per Student <span class="req">*</span></label>
+        <input type="number" id="samplesInput" name="samples_per_student" class="form-control" value="{{ settings.samples_per_student or '30' }}" min="10" max="100" required>
+        <div class="form-hint">Number of facial sample frames captured per student (Default: 30).</div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--border-subtle);">
+        <a href="{{ url_for('dashboard_page') }}" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Save Settings</span>
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Admin Registration Audit Card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Admin Registration Audit Registry
+      </div>
+      <a href="{{ url_for('export_admin_registry_action') }}" class="btn btn-secondary btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export Excel Registry (.xlsx)</span>
+      </a>
+    </div>
+
+    <p style="color: var(--text-secondary); font-size: 13.5px; margin-bottom: 16px;">
+      Private audit log of registered system administrators stored securely in <code>data/private/admin_registry.xlsx</code>. Passwords and credentials are never stored in the audit file.
+    </p>
+
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Admin ID</th>
+            <th>Full Name</th>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Registered</th>
+            <th>Last Login</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if audit_records %}
+            {% for a in audit_records %}
+              <tr>
+                <td><span class="badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8;">#{{ a.id }}</span></td>
+                <td style="font-weight: 600;">{{ a.full_name }}</td>
+                <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text-muted);">{{ a.username }}</span></td>
+                <td style="font-size: 13px; color: var(--text-muted);">{{ a.email }}</td>
+                <td><span style="font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ a.reg_date }} {{ a.reg_time }}</span></td>
+                <td><span style="font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ a.last_login }}</span></td>
+                <td><span class="badge badge-ready">{{ a.status }}</span></td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7">
+                <div class="empty-state" style="padding: 20px 10px;">
+                  <p style="margin: 0;">No audit records found.</p>
+                </div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Database Maintenance & Backup Card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Database Backup & Maintenance
+      </div>
+    </div>
+    
+    <p style="color: var(--text-secondary); font-size: 13.5px; margin-bottom: 14px;">
+      Create a safe snapshot of the entire SQLite database. The backup file will be saved in the <code>backups/</code> directory with a timestamp and downloaded to your computer.
+    </p>
+
+    <!-- Explanatory Info Alert -->
+    <div class="alert alert-info" style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.22); border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; font-size: 13px; line-height: 1.5;">
+      <div style="font-weight: 600; color: #a5b4fc; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <span>SQLite Database Backup Information</span>
+      </div>
+      <div style="color: var(--text-secondary);">
+        This is a SQLite database backup. It can be restored by SmartAttend or inspected using a SQLite database viewer.
+      </div>
+    </div>
+
+    <!-- Dynamic Success Confirmation Container -->
+    <div id="backupSuccessBox" style="display: none; background: rgba(16, 185, 129, 0.09); border: 1px solid rgba(16, 185, 129, 0.28); border-radius: 8px; padding: 14px 16px; margin-bottom: 18px;">
+      <div style="font-weight: 600; color: #34d399; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span>Database backup created successfully.</span>
+      </div>
+      <div style="font-size: 13px; color: var(--text-primary); margin-bottom: 4px;">
+        Generated File: <strong id="backupFilenameText" style="font-family: 'JetBrains Mono', monospace; color: #6ee7b7;"></strong>
+      </div>
+      <div style="font-size: 12.5px; color: var(--text-secondary);">
+        This is a SQLite database backup. It can be restored by SmartAttend or inspected using a SQLite database viewer.
+      </div>
+    </div>
+
+    <form id="backupDbForm" method="POST" action="{{ url_for('backup_database_action') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button id="backupSubmitBtn" type="submit" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Backup Database Snapshot</span>
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.getElementById('backupDbForm');
+  const btn = document.getElementById('backupSubmitBtn');
+  const successBox = document.getElementById('backupSuccessBox');
+  const filenameText = document.getElementById('backupFilenameText');
+
+  if (form && btn) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="btn-spinner"></span> <span>Creating Backup...</span>`;
+
+      try {
+        const formData = new FormData(form);
+        const res = await fetch(form.action, {
+          method: 'POST',
+          body: formData
+        });
+
+        if (res.ok) {
+          let filename = res.headers.get('X-Backup-Filename');
+          if (!filename) {
+            const disposition = res.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (match && match[1]) {
+              filename = match[1].replace(/['"]/g, '');
+            }
+          }
+          if (!filename) {
+            filename = 'attendance_backup.db';
+          }
+
+          const blob = await res.blob();
+          const downloadUrl = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = downloadUrl;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            window.URL.revokeObjectURL(downloadUrl);
+            a.remove();
+          }, 1000);
+
+          if (filenameText) filenameText.textContent = filename;
+          if (successBox) successBox.style.display = 'block';
+          if (typeof showToast === 'function') {
+            showToast('Database backup created successfully.', 'success');
+          }
+        } else {
+          alert('Failed to generate database backup. Please check server logs.');
+        }
+      } catch (err) {
+        console.error('Backup download error:', err);
+        alert('An error occurred during database backup.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    });
+  }
+});
+</script>
+{% endblock %}

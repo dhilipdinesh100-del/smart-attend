@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Student ID History{% endblock %}
+{% block page_title %}Student ID History & Recycling{% endblock %}
+{% block page_subtitle %}Audit trail of assigned, released, and recycled numeric student identification codes{% endblock %}
+
+{% block content %}
+<div class="card">
+  <!-- Action Bar -->
+  <div class="filter-bar" style="justify-content: space-between; align-items: center;">
+    <div>
+      <h3 style="font-size: 16px; font-weight: 700; color: #ffffff; margin: 0 0 4px 0;">ID Lifecycle Audit Log</h3>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Total historical ID events: <strong style="color: var(--primary);">{{ history|length }}</strong></p>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <a href="{{ url_for('students_page') }}" class="btn btn-outline">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        <span>Back to Students</span>
+      </a>
+      <a href="{{ url_for('export_student_id_history_csv_action') }}" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export ID History (.csv)</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- History Table -->
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Student ID</th>
+          <th>Student Name</th>
+          <th>Event</th>
+          <th>Assigned Date</th>
+          <th>Released Date</th>
+          <th>Status</th>
+          <th>Previous Owner</th>
+          <th>Current Owner</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if history %}
+          {% for h in history %}
+            <tr>
+              <td>
+                <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; font-family: 'JetBrains Mono', monospace; font-weight: 700;">
+                  #{{ h.student_id_code }}
+                </span>
+              </td>
+              <td>
+                <span style="font-weight: 600; color: #ffffff;">{{ h.student_name }}</span>
+              </td>
+              <td>
+                <span class="badge {% if h.event == 'ASSIGNED' %}badge-ready{% elif h.event == 'REASSIGNED' %}badge-manual{% else %}badge-pending{% endif %}">
+                  {{ h.event }}
+                </span>
+              </td>
+              <td>
+                <span style="font-size: 12.5px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                  {{ h.assigned_date }}
+                </span>
+              </td>
+              <td>
+                <span style="font-size: 12.5px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                  {{ h.released_date or '--' }}
+                </span>
+              </td>
+              <td>
+                <span class="badge {% if h.status == 'ACTIVE' %}badge-ready{% elif h.status == 'RELEASED' %}badge-pending{% else %}badge-absent{% endif %}">
+                  {{ h.status }}
+                </span>
+              </td>
+              <td>
+                <span style="font-size: 13px; color: var(--text-muted);">{{ h.previous_owner or '—' }}</span>
+              </td>
+              <td>
+                <span style="font-size: 13px; color: #38bdf8; font-weight: 600;">{{ h.current_owner or '—' }}</span>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="8">
+              <div class="empty-state" style="padding: 30px;">
+                <p>No student ID lifecycle history recorded yet.</p>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

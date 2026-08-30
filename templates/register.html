@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Admin Account — {{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 30%, rgba(99, 102, 241, 0.15) 0%, #090d16 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .register-box {
+      width: 100%;
+      max-width: 460px;
+      background: #111827;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(12px);
+    }
+    .register-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .register-brand-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 16px auto;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 0 24px rgba(99, 102, 241, 0.35);
+    }
+    .register-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.4px;
+      margin-bottom: 4px;
+    }
+    .register-sub {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <div class="register-box">
+    <div class="register-header">
+      <div class="register-brand-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <line x1="19" x2="19" y1="8" y2="14"/>
+          <line x1="22" x2="16" y1="11" y2="11"/>
+        </svg>
+      </div>
+      <h1 class="register-title">Create Admin Account</h1>
+      <p class="register-sub">Administrator Registration</p>
+    </div>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div style="margin-bottom: 20px;">
+          {% for category, message in messages %}
+            <div class="scanner-status-banner {% if category == 'success' %}success{% elif category == 'error' or category == 'danger' %}danger{% else %}warning{% endif %}" style="padding: 12px 14px; font-size: 13px; text-align: left; margin-bottom: 8px;">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('register_admin_page') }}" data-loading-text="Creating Account...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label" for="fullNameInput">Full Name <span class="req">*</span></label>
+        <input type="text" id="fullNameInput" name="full_name" class="form-control" placeholder="e.g. Johnathan Vance" value="{{ full_name or '' }}" required autofocus autocomplete="name">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="usernameInput">Username <span class="req">*</span></label>
+        <input type="text" id="usernameInput" name="username" class="form-control" placeholder="e.g. jvance" value="{{ username or '' }}" required autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="emailInput">Email <span class="req">*</span></label>
+        <input type="email" id="emailInput" name="email" class="form-control" placeholder="e.g. admin@school.edu" value="{{ email or '' }}" required autocomplete="email">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="passwordInput">Password <span class="req">*</span></label>
+        <input type="password" id="passwordInput" name="password" class="form-control" placeholder="Minimum 8 characters" required autocomplete="new-password">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="confirmPasswordInput">Confirm Password <span class="req">*</span></label>
+        <input type="password" id="confirmPasswordInput" name="confirm_password" class="form-control" placeholder="Re-enter your password" required autocomplete="new-password">
+      </div>
+
+      <div style="margin-top: 24px;">
+        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 12px; font-size: 14.5px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+          <span>Create Account</span>
+        </button>
+      </div>
+
+      <div style="margin-top: 24px; text-align: center; font-size: 13.5px; color: #94a3b8; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 20px;">
+        Already have an account?
+        <a href="{{ url_for('login_page') }}" style="color: #818cf8; font-weight: 600; text-decoration: none; margin-left: 4px;">Sign In</a>
+      </div>
+    </form>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

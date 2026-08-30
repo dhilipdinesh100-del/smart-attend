@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}Admin User Management{% endblock %}
+{% block page_title %}Admin Users{% endblock %}
+{% block page_subtitle %}Manage authorized administrator accounts, audit logs, and access credentials{% endblock %}
+
+{% block content %}
+<div class="card">
+  <!-- Action Bar -->
+  <div class="filter-bar" style="justify-content: space-between; align-items: center;">
+    <div>
+      <h3 style="font-size: 16px; font-weight: 700; color: #ffffff; margin: 0 0 4px 0;">Administrator Registry</h3>
+      <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">Total active administrators: <strong style="color: var(--primary);">{{ users|length }}</strong></p>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <a href="{{ url_for('new_user_page') }}" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Create New User</span>
+      </a>
+      <a href="{{ url_for('export_admin_registry_action') }}" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Export Registry (.xlsx)</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Users Table -->
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Admin ID</th>
+          <th>Full Name</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Registration Date</th>
+          <th>Last Login</th>
+          <th>Account Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if users %}
+          {% for u in users %}
+            <tr>
+              <td>
+                <span class="badge" style="background: rgba(99, 102, 241, 0.15); color: #818cf8; font-family: 'JetBrains Mono', monospace;">
+                  #{{ u.id }}
+                </span>
+              </td>
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #6366f1, #8b5cf6); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: white;">
+                    {{ (u.full_name or u.username)[0].upper() }}
+                  </div>
+                  <div>
+                    <div style="font-weight: 600; color: #ffffff;">{{ u.full_name or 'Administrator' }}</div>
+                    {% if current_user and current_user.id == u.id %}
+                      <span style="font-size: 11px; color: #38bdf8; font-weight: 600;">(Current Session)</span>
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #cbd5e1;">{{ u.username }}</span>
+              </td>
+              <td>
+                <span style="font-size: 13px; color: var(--text-muted);">{{ u.email }}</span>
+              </td>
+              <td>
+                <span style="font-size: 12.5px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                  {{ u.reg_date or u.created_at or '--' }} {{ u.reg_time or '' }}
+                </span>
+              </td>
+              <td>
+                <span style="font-size: 12.5px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">
+                  {{ u.last_login or 'Never' }}
+                </span>
+              </td>
+              <td>
+                <span class="badge badge-ready">
+                  {{ u.status or 'Active' }}
+                </span>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state" style="padding: 30px;">
+                <p>No administrator accounts registered yet.</p>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

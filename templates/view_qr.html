@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}QR Pass — {{ student.name }}{% endblock %}
+{% block page_title %}Digital QR Attendance Pass{% endblock %}
+{% block page_subtitle %}High-resolution unique attendance QR identification for {{ student.name }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 520px; margin: 0 auto;">
+  <div class="card" style="text-align: center; display: flex; flex-direction: column; align-items: center; padding: 36px 28px;">
+    <!-- Avatar -->
+    <div style="width: 64px; height: 64px; border-radius: 50%; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: #ffffff; margin-bottom: 14px; box-shadow: var(--shadow-glow);">
+      {{ student.name[0] }}
+    </div>
+
+    <!-- Student Info -->
+    <h2 style="font-size: 22px; font-weight: 800; color: #ffffff; margin-bottom: 4px;">{{ student.name }}</h2>
+    <div style="font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--text-secondary); margin-bottom: 24px;">
+      Roll No: <strong style="color: #ffffff;">{{ student.roll_no }}</strong> &bull; Student ID: <strong style="color: #818cf8;">#{{ student.id }}</strong>
+    </div>
+
+    <!-- QR Code Image Card -->
+    <div style="background: #ffffff; padding: 20px; border-radius: var(--radius-lg); box-shadow: var(--shadow-md); margin-bottom: 24px; text-align: center; border: 1px solid rgba(255,255,255,0.2);">
+      <img src="{{ url_for('view_qr_page', student_id=student.id) }}?raw=1" alt="QR Pass for {{ student.name }}" style="width: 220px; height: 220px; display: block; border-radius: var(--radius-xs);">
+    </div>
+
+    <!-- Action Buttons -->
+    <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; width: 100%;">
+      <a href="{{ url_for('download_qr_file', student_id=student.id) }}" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Download QR (.PNG)</span>
+      </a>
+
+      <a href="{{ url_for('print_qr_page', student_id=student.id) }}" target="_blank" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg>
+        <span>Print Card</span>
+      </a>
+
+      <a href="{{ url_for('student_detail_page', student_id=student.id) }}" class="btn btn-outline">
+        <span>&larr; Student Profile</span>
+      </a>
+
+      <a href="{{ url_for('students_page') }}" class="btn btn-outline">
+        <span>Roster</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

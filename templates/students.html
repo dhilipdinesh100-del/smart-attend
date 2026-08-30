@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}Students Management{% endblock %}
+{% block page_title %}Students{% endblock %}
+{% block page_subtitle %}Manage enrolled student roster, biometrics, credentials, and actions{% endblock %}
+
+{% block content %}
+<div class="card">
+  <!-- Search & Action Bar -->
+  <div class="filter-bar">
+    <form method="GET" action="{{ url_for('students_page') }}" style="display: flex; gap: 10px; flex: 1; max-width: 480px;">
+      <div class="search-input-wrap" style="flex: 1;">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" name="search" class="form-control" placeholder="Search by name or roll number..." value="{{ search_query or '' }}">
+      </div>
+      <button type="submit" class="btn btn-secondary">Search</button>
+      {% if search_query %}
+        <a href="{{ url_for('students_page') }}" class="btn btn-outline">Clear</a>
+      {% endif %}
+    </form>
+
+    <div style="display: flex; gap: 8px;">
+      <a href="{{ url_for('student_id_history_page') }}" class="btn btn-secondary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+        <span>ID History</span>
+      </a>
+      <a href="{{ url_for('register_student_page') }}" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>Add Student</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Students Table -->
+  <div class="table-responsive">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>Roll Number</th>
+          <th>Student ID</th>
+          <th>Face Status</th>
+          <th>QR Pass</th>
+          <th>Registered</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if students %}
+          {% for s in students %}
+            <tr>
+              <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--primary-gradient); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #ffffff; flex-shrink: 0;">
+                    {{ s.name[0] }}
+                  </div>
+                  <div>
+                    <a href="{{ url_for('student_detail_page', student_id=s.id) }}" style="font-weight: 600; color: #ffffff; text-decoration: none;">{{ s.name }}</a>
+                  </div>
+                </div>
+              </td>
+              <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600;">{{ s.roll_no }}</span></td>
+              <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #818cf8; font-weight: 600;">#{{ s.student_id_code or s.id }}</span></td>
+              <td>
+                <span class="badge {% if s.face_status == 'Ready' %}badge-ready{% elif s.face_status == 'Partial' %}badge-pending{% else %}badge-absent{% endif %}">
+                  {{ s.face_samples }} / 30 ({{ s.face_status }})
+                </span>
+              </td>
+              <td>
+                <span class="badge {% if s.qr_status == 'Available' %}badge-ready{% else %}badge-pending{% endif %}">
+                  {{ s.qr_status }}
+                </span>
+              </td>
+              <td><span style="font-size: 12.5px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">{{ s.created_at[:10] }}</span></td>
+              <td style="text-align: right;">
+                <div style="display: inline-flex; gap: 6px;">
+                  <a href="{{ url_for('student_detail_page', student_id=s.id) }}" class="btn btn-secondary btn-sm" title="View Profile">View</a>
+                  <a href="{{ url_for('face_capture_page', student_id=s.id) }}" class="btn btn-secondary btn-sm" title="Capture Face">Face</a>
+                  <a href="{{ url_for('download_qr_file', student_id=s.id) }}" class="btn btn-secondary btn-sm" title="Download QR">QR</a>
+                  <button type="button" class="btn btn-secondary btn-sm btn-edit-student"
+                          data-id="{{ s.id }}"
+                          data-name="{{ s.name }}"
+                          data-roll="{{ s.roll_no }}">
+                    Edit
+                  </button>
+                  <button type="button" class="btn btn-danger btn-sm btn-delete-student"
+                          data-id="{{ s.id }}"
+                          data-name="{{ s.name }}">
+                    Delete
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="7">
+              <div class="empty-state">
+                <div class="empty-state-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" x2="19" y1="8" y2="14"/><line x1="22" x2="16" y1="11" y2="11"/></svg>
+                </div>
+                <h3>No students registered yet.</h3>
+                <p>Register students to start collecting facial biometrics, generating QR codes, and tracking attendance.</p>
+                <a href="{{ url_for('register_student_page') }}" class="btn btn-primary">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>Add Student</span>
+                </a>
+              </div>
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Edit Student Modal -->
+<div class="modal-backdrop" id="editModal">
+  <div class="modal-box">
+    <h3 class="modal-title">Edit Student Information</h3>
+    <p class="modal-desc">Update the student's legal name or roll number. QR cards will be updated automatically.</p>
+    <form id="editForm" method="POST" action="" data-loading-text="Saving Changes...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="form-group">
+        <label class="form-label">Full Name <span class="req">*</span></label>
+        <input type="text" id="editName" name="name" class="form-control" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Roll Number <span class="req">*</span></label>
+        <input type="text" id="editRoll" name="roll_no" class="form-control" required>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Delete Student Modal -->
+<div class="modal-backdrop" id="deleteModal">
+  <div class="modal-box">
+    <h3 class="modal-title" style="color: #fb7185;">Delete Student?</h3>
+    <p class="modal-desc">
+      Are you sure you want to delete <strong id="deleteStudentName" style="color: #ffffff;"></strong>?
+      <br><br>
+      This will remove the student, attendance records, QR code and face dataset.
+    </p>
+    <form id="deleteForm" method="POST" action="" data-loading-text="Deleting...">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete Student</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.btn-edit-student').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const name = btn.getAttribute('data-name');
+      const roll = btn.getAttribute('data-roll');
+      document.getElementById('editForm').action = '/students/edit/' + id;
+      document.getElementById('editName').value = name;
+      document.getElementById('editRoll').value = roll;
+      openModal('editModal');
+    });
+  });
+
+  document.querySelectorAll('.btn-delete-student').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      const name = btn.getAttribute('data-name');
+      document.getElementById('deleteForm').action = '/students/delete/' + id;
+      document.getElementById('deleteStudentName').textContent = name;
+      openModal('deleteModal');
+    });
+  });
+});
+</script>
+{% endblock %}

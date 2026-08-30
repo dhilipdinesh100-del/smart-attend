@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Capture Face Dataset — {{ student.name }}{% endblock %}
+{% block page_title %}Face Dataset Capture{% endblock %}
+{% block page_subtitle %}Enroll facial biometric samples for {{ student.name }} ({{ student.roll_no }}){% endblock %}
+
+{% block content %}
+<div class="dashboard-grid-2">
+  <!-- Left Column: Camera Viewport -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+        Live Facial Camera Feed
+      </div>
+      <div class="system-status-pill">
+        <span class="pulse-dot"></span>
+        <span id="sensorStatusText">Sensor Active</span>
+      </div>
+    </div>
+
+    <!-- Scanner Viewport -->
+    <div class="scanner-viewport" style="margin-bottom: 20px;">
+      <img src="{{ url_for('video_feed_capture', student_id=student.id) }}" alt="Camera Stream" class="scanner-video" id="captureFeed">
+    </div>
+
+    <!-- Capture Action Controls -->
+    <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+      <button type="button" class="btn btn-primary" id="btnStartCapture" onclick="startCaptureSession()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
+        <span id="btnCaptureText">Start Capture ({{ target_samples }} Samples)</span>
+      </button>
+      <button type="button" class="btn btn-secondary" id="btnStopCamera" onclick="stopCameraSession()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        <span>Stop Camera</span>
+      </button>
+      <a href="{{ url_for('train_model_page') }}" class="btn btn-success" onclick="stopCameraSession()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
+        <span>Train Model &rarr;</span>
+      </a>
+      <a href="{{ url_for('student_detail_page', student_id=student.id) }}" class="btn btn-outline" onclick="stopCameraSession()">
+        <span>Back</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Right Column: Student Info & Capture Progress -->
+  <div style="display: flex; flex-direction: column; gap: 20px;">
+    <!-- Student Details Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          Student Information
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+          <span style="color: var(--text-muted); font-size: 13.5px;">Student Name</span>
+          <span style="font-weight: 700; color: #ffffff;">{{ student.name }}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-subtle); padding-bottom: 8px;">
+          <span style="color: var(--text-muted); font-size: 13.5px;">Roll Number</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-weight: 600; color: #ffffff;">{{ student.roll_no }}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between;">
+          <span style="color: var(--text-muted); font-size: 13.5px;">Student ID</span>
+          <span style="font-family: 'JetBrains Mono', monospace; color: #818cf8; font-weight: 600;">#{{ student.id }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Capture Progress Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Capture Progress
+        </div>
+      </div>
+      <div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">Samples Collected</span>
+          <span id="sampleCountDisplay" style="font-weight: 800; color: #818cf8; font-family: 'JetBrains Mono', monospace;">{{ sample_count }} / {{ target_samples }}</span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-bar-wrap" style="margin-bottom: 16px;">
+          <div id="captureProgressBar" class="progress-bar-fill" style="width: {{ (sample_count / target_samples * 100) if target_samples > 0 else 0 }}%;"></div>
+        </div>
+
+        <div id="captureStatusBox" class="scanner-status-banner {% if sample_count >= target_samples %}success{% endif %}">
+          {% if sample_count >= target_samples %}
+            <strong>✓ Face dataset captured successfully.</strong>
+            <div style="font-size: 12.5px; margin-top: 4px; color: var(--text-secondary);">Dataset is ready for model compilation.</div>
+          {% else %}
+            Position student in front of the camera, ensure balanced lighting, then click "Start Capture".
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let capturePollingInterval = null;
+
+async function startCaptureSession() {
+  const btn = document.getElementById('btnStartCapture');
+  const btnText = document.getElementById('btnCaptureText');
+  const statusBox = document.getElementById('captureStatusBox');
+  const feed = document.getElementById('captureFeed');
+  
+  if (!feed.src || feed.src.endsWith('#') || feed.src === window.location.href) {
+    feed.src = "{{ url_for('video_feed_capture', student_id=student.id) }}";
+  }
+  
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btnText.textContent = 'Capturing face samples...';
+  statusBox.className = 'scanner-status-banner warning';
+  statusBox.innerHTML = '<strong>Capturing face samples...</strong><div style="font-size:12.5px; margin-top:4px;">Keep face steady and slowly tilt slightly.</div>';
+
+  try {
+    const res = await fetch('/api/capture/start/{{ student.id }}', { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Capture started. Collecting facial samples...', 'info');
+      startStatusPolling();
+    }
+  } catch (err) {
+    showToast('Failed to start capture: ' + err, 'error');
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btnText.textContent = 'Start Capture ({{ target_samples }} Samples)';
+  }
+}
+
+function startStatusPolling() {
+  if (capturePollingInterval) clearInterval(capturePollingInterval);
+
+  capturePollingInterval = setInterval(async () => {
+    try {
+      const res = await fetch('/api/capture/status/{{ student.id }}');
+      const data = await res.json();
+
+      const count = data.sample_count;
+      const target = data.target_samples;
+      const pct = Math.min(100, Math.round((count / target) * 100));
+
+      document.getElementById('sampleCountDisplay').textContent = `${count} / ${target}`;
+      document.getElementById('captureProgressBar').style.width = `${pct}%`;
+
+      if (data.completed || count >= target) {
+        clearInterval(capturePollingInterval);
+        const statusBox = document.getElementById('captureStatusBox');
+        statusBox.className = 'scanner-status-banner success';
+        statusBox.innerHTML = '<strong>✓ Face dataset captured successfully.</strong><div style="font-size:12.5px; margin-top:4px;">Camera stopped. You can now proceed to Train Model.</div>';
+        
+        const btn = document.getElementById('btnStartCapture');
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        document.getElementById('btnCaptureText').textContent = 'Re-capture Samples';
+        showToast('Face dataset captured successfully!', 'success');
+        stopCameraSession();
+      }
+    } catch (e) {
+      console.warn('Status poll error:', e);
+    }
+  }, 1000);
+}
+
+function stopCameraSession() {
+  if (capturePollingInterval) {
+    clearInterval(capturePollingInterval);
+    capturePollingInterval = null;
+  }
+  const feed = document.getElementById('captureFeed');
+  if (feed) {
+    feed.src = '';
+  }
+  document.getElementById('sensorStatusText').textContent = 'Camera Off';
+  fetch('/api/camera/stop', { method: 'POST', keepalive: true }).catch(() => {});
+}
+
+// Page exit lifecycle cleanup
+window.addEventListener('pagehide', stopCameraSession);
+window.addEventListener('beforeunload', stopCameraSession);
+</script>
+{% endblock %}
