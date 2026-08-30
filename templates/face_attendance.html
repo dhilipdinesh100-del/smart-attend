@@ -13,20 +13,42 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
         Live Optical Feed
       </div>
-      <div style="display: flex; gap: 8px; align-items: center;">
-        <span class="badge {% if model_ready %}badge-ready{% else %}badge-absent{% endif %}">
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <span class="badge {% if model_ready %}badge-ready{% else %}badge-absent{% endif %}" id="modelStatusBadge">
           {% if model_ready %}Model Active (Threshold: {{ conf_thresh }}){% else %}Model Missing — Train First{% endif %}
         </span>
+        <div class="scanner-mode-switch" id="cameraModeSwitch">
+          <button type="button" class="scanner-mode-btn active" id="modeBrowserBtn" onclick="switchCameraMode('browser')">Browser Webcam</button>
+          <button type="button" class="scanner-mode-btn" id="modeServerBtn" onclick="switchCameraMode('server')">Server Camera</button>
+        </div>
         <div class="system-status-pill" id="scannerStatusPill">
           <span class="pulse-dot" id="scannerPulseDot"></span>
-          <span id="scannerStatusPillText">Connecting...</span>
+          <span id="scannerStatusPillText">Initializing...</span>
         </div>
       </div>
     </div>
 
     <!-- Centered Large Camera Viewport -->
     <div class="scanner-viewport" id="scannerViewport">
-      <img src="{{ url_for('video_feed_face') }}" alt="Face Recognition Stream" class="scanner-video" id="faceVideoFeed" onload="onFeedLoaded()" onerror="onFeedError()">
+      <!-- Browser WebRTC Video (Default for Cloud / Render) -->
+      <video id="browserVideo" class="scanner-video" autoplay playsinline muted></video>
+
+      <!-- Server MJPEG Stream (For Local Server Mode) -->
+      <img id="faceVideoFeed" class="scanner-video" style="display: none;" alt="Face Recognition Stream">
+
+      <!-- Fallback / Placeholder when camera is stopped or denied -->
+      <div id="cameraPlaceholder" class="camera-placeholder" style="display: none;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div id="placeholderTitle" style="font-weight: 700; color: #ffffff; font-size: 15px;">Camera Inactive</div>
+        <div id="placeholderDesc" style="font-size: 13px; max-width: 320px;">Click "Start Camera" to enable live face attendance scanning.</div>
+        <button type="button" class="btn btn-primary btn-sm" id="btnPlaceholderStart" onclick="startCamera()">Enable Camera</button>
+      </div>
+
+      <!-- Face Alignment Guide Overlay -->
+      <div class="camera-guide-overlay" id="cameraGuideOverlay"></div>
+
+      <!-- Hidden canvas for capturing frame snapshots -->
+      <canvas id="frameCanvas" class="scanner-canvas-hidden"></canvas>
     </div>
 
     <!-- Controls -->
@@ -35,10 +57,10 @@
         Position face inside the frame. Attendance is recorded automatically once per student per day.
       </div>
       <div style="display: flex; gap: 8px;">
-        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleScanner" onclick="toggleFaceScanner()">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleScanner" onclick="toggleCamera()">
           <span id="btnToggleText">Stop Camera</span>
         </button>
-        <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline btn-sm" onclick="stopFaceScanner()">
+        <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline btn-sm" onclick="stopCamera()">
           <span>Exit</span>
         </a>
       </div>
@@ -58,7 +80,7 @@
 
       <div id="liveDetectionStatus" class="scanner-status-banner">
         <div style="font-weight: 600; color: var(--text-muted);">Optical Sensor Initializing...</div>
-        <div style="font-size: 12.5px; color: var(--text-dim); margin-top: 4px;">Connecting to camera and scanning for registered faces...</div>
+        <div style="font-size: 12.5px; color: var(--text-dim); margin-top: 4px;">Requesting camera stream and ready to scan for registered faces...</div>
       </div>
     </div>
 
@@ -109,108 +131,266 @@
 </div>
 
 <script>
-let scannerActive = true;
-let facePollInterval = null;
+const CSRF_TOKEN = "{{ csrf_token() }}";
+let cameraMode = 'browser'; // 'browser' (cloud/Render) or 'server' (local OpenCV)
+let isCameraActive = false;
+let mediaStream = null;
+let scanTimer = null;
+let isProcessingFrame = false;
 
-function onFeedLoaded() {
-  if (scannerActive) {
-    document.getElementById('scannerStatusPillText').textContent = 'Scanner Online';
-    document.getElementById('scannerPulseDot').style.display = 'inline-block';
-    document.getElementById('scannerPulseDot').style.background = '#34d399';
-    const statusBox = document.getElementById('liveDetectionStatus');
-    if (statusBox && statusBox.textContent.includes('Initializing')) {
-      statusBox.innerHTML = `
-        <div style="font-weight: 600; color: #34d399;">Optical Sensor Active</div>
-        <div style="font-size: 12.5px; color: var(--text-dim); margin-top: 4px;">Scanning live video feed for registered biometric faces...</div>
-      `;
+document.addEventListener('DOMContentLoaded', () => {
+  startCamera();
+});
+
+function switchCameraMode(mode) {
+  if (cameraMode === mode) return;
+  stopCamera();
+  cameraMode = mode;
+  
+  document.getElementById('modeBrowserBtn').classList.toggle('active', mode === 'browser');
+  document.getElementById('modeServerBtn').classList.toggle('active', mode === 'server');
+  
+  startCamera();
+}
+
+async function startCamera() {
+  if (isCameraActive) return;
+  
+  const videoEl = document.getElementById('browserVideo');
+  const serverImg = document.getElementById('faceVideoFeed');
+  const placeholder = document.getElementById('cameraPlaceholder');
+  const overlay = document.getElementById('cameraGuideOverlay');
+  const statusPill = document.getElementById('scannerStatusPillText');
+  const dot = document.getElementById('scannerPulseDot');
+  const btnToggle = document.getElementById('btnToggleText');
+  
+  placeholder.style.display = 'none';
+  overlay.style.display = 'block';
+  statusPill.textContent = 'Connecting...';
+  dot.style.display = 'inline-block';
+  dot.style.background = '#fbbf24';
+  
+  if (cameraMode === 'browser') {
+    serverImg.style.display = 'none';
+    videoEl.style.display = 'block';
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCameraError('Browser Camera Not Supported', 'Your browser or environment does not support WebRTC camera access. Please use HTTPS or localhost.');
+      return;
     }
+    
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false
+      });
+      videoEl.srcObject = mediaStream;
+      await videoEl.play();
+      
+      isCameraActive = true;
+      statusPill.textContent = 'Browser Camera Active';
+      dot.style.background = '#34d399';
+      btnToggle.textContent = 'Stop Camera';
+      
+      updateStatusBanner('info', 'Optical Sensor Active', 'Scanning live browser video feed for registered biometric faces...');
+      startBrowserFrameScanning();
+    } catch (err) {
+      console.error('Camera access error:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        showCameraError('Permission Denied', 'Camera permission was denied. Please allow camera permissions in your browser address bar.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        showCameraError('Camera Unavailable', 'No webcam detected on your device. Please plug in a webcam.');
+      } else {
+        showCameraError('Camera Error', `Unable to access webcam: ${err.message || 'Unknown error'}`);
+      }
+    }
+  } else {
+    // Server OpenCV mode
+    videoEl.style.display = 'none';
+    serverImg.style.display = 'block';
+    serverImg.src = "{{ url_for('video_feed_face') }}?t=" + Date.now();
+    
+    isCameraActive = true;
+    statusPill.textContent = 'Server Camera Active';
+    dot.style.background = '#34d399';
+    btnToggle.textContent = 'Stop Camera';
+    updateStatusBanner('info', 'Server Optical Feed Active', 'Scanning physical server camera stream...');
+    startServerStatusPolling();
   }
 }
 
-function onFeedError() {
+function stopCamera() {
+  isCameraActive = false;
+  
+  if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
+  
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+  
+  const videoEl = document.getElementById('browserVideo');
+  if (videoEl) {
+    videoEl.srcObject = null;
+    videoEl.style.display = 'none';
+  }
+  
+  const serverImg = document.getElementById('faceVideoFeed');
+  if (serverImg) {
+    serverImg.src = '';
+    serverImg.style.display = 'none';
+  }
+  
+  document.getElementById('cameraGuideOverlay').style.display = 'none';
+  document.getElementById('cameraPlaceholder').style.display = 'flex';
+  document.getElementById('placeholderTitle').textContent = 'Camera Inactive';
+  document.getElementById('placeholderDesc').textContent = 'Live camera feed is stopped.';
   document.getElementById('scannerStatusPillText').textContent = 'Camera Offline';
-  document.getElementById('scannerPulseDot').style.display = 'inline-block';
-  document.getElementById('scannerPulseDot').style.background = '#fb7185';
-}
-
-function stopFaceScanner() {
-  scannerActive = false;
-  const feed = document.getElementById('faceVideoFeed');
-  if (feed) {
-    feed.src = '';
-  }
-  document.getElementById('scannerStatusPillText').textContent = 'Scanner Offline';
   document.getElementById('scannerPulseDot').style.display = 'none';
   document.getElementById('btnToggleText').textContent = 'Start Camera';
   
-  if (facePollInterval) {
-    clearInterval(facePollInterval);
-    facePollInterval = null;
-  }
   fetch('/api/camera/stop', { method: 'POST', keepalive: true }).catch(() => {});
 }
 
-function startFaceScanner() {
-  scannerActive = true;
-  const feed = document.getElementById('faceVideoFeed');
-  if (feed) {
-    feed.src = "{{ url_for('video_feed_face') }}?t=" + Date.now();
-  }
-  document.getElementById('scannerStatusPillText').textContent = 'Connecting...';
-  document.getElementById('scannerPulseDot').style.display = 'inline-block';
-  document.getElementById('scannerPulseDot').style.background = '#fbbf24';
-  document.getElementById('btnToggleText').textContent = 'Stop Camera';
-  startFacePolling();
-}
-
-function toggleFaceScanner() {
-  if (scannerActive) {
-    stopFaceScanner();
+function toggleCamera() {
+  if (isCameraActive) {
+    stopCamera();
   } else {
-    startFaceScanner();
+    startCamera();
   }
 }
 
-function startFacePolling() {
-  if (facePollInterval) clearInterval(facePollInterval);
+function showCameraError(title, desc) {
+  isCameraActive = false;
+  document.getElementById('browserVideo').style.display = 'none';
+  document.getElementById('faceVideoFeed').style.display = 'none';
+  document.getElementById('cameraGuideOverlay').style.display = 'none';
+  
+  const placeholder = document.getElementById('cameraPlaceholder');
+  placeholder.style.display = 'flex';
+  document.getElementById('placeholderTitle').textContent = title;
+  document.getElementById('placeholderDesc').textContent = desc;
+  
+  document.getElementById('scannerStatusPillText').textContent = 'Error';
+  document.getElementById('scannerPulseDot').style.display = 'inline-block';
+  document.getElementById('scannerPulseDot').style.background = '#fb7185';
+  document.getElementById('btnToggleText').textContent = 'Start Camera';
+  
+  updateStatusBanner('danger', title, desc);
+}
 
-  facePollInterval = setInterval(async () => {
-    if (!scannerActive) return;
+function startBrowserFrameScanning() {
+  if (scanTimer) clearInterval(scanTimer);
+  
+  const video = document.getElementById('browserVideo');
+  const canvas = document.getElementById('frameCanvas');
+  const ctx = canvas.getContext('2d');
+  
+  scanTimer = setInterval(async () => {
+    if (!isCameraActive || isProcessingFrame || video.readyState < 2) return;
+    
+    isProcessingFrame = true;
+    try {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      if (!blob) {
+        isProcessingFrame = false;
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('frame', blob, 'frame.jpg');
+      formData.append('csrf_token', CSRF_TOKEN);
+      
+      const response = await fetch('/api/face/scan-frame', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRF-Token': CSRF_TOKEN }
+      });
+      
+      if (!response.ok) {
+        isProcessingFrame = false;
+        return;
+      }
+      
+      const data = await response.json();
+      handleScanResult(data);
+    } catch (e) {
+      console.warn('Scan frame error:', e);
+    } finally {
+      isProcessingFrame = false;
+    }
+  }, 600);
+}
+
+function handleScanResult(data) {
+  const guide = document.getElementById('cameraGuideOverlay');
+  
+  if (data.status === 'MARKED' && data.student) {
+    if (guide) guide.classList.add('detected');
+    updateStatusBanner('success', '✓ Attendance Marked', `${data.student.name} (${data.student.roll_no}) — Verified via Face Recognition &bull; ${data.record ? data.record.time : ''}`);
+    refreshRecentRecords();
+    setTimeout(() => { if (guide) guide.classList.remove('detected'); }, 2000);
+  } else if (data.status === 'ALREADY_MARKED' && data.student) {
+    if (guide) guide.classList.add('detected');
+    updateStatusBanner('warning', '⚠ Already Marked Today', `${data.student.name} (${data.student.roll_no}) — Check-in already recorded for today.`);
+    setTimeout(() => { if (guide) guide.classList.remove('detected'); }, 2000);
+  } else if (data.status === 'COOLDOWN') {
+    // Recent match within cooldown window - keep state clean
+  } else if (data.status === 'NOT_FOUND') {
+    updateStatusBanner('danger', '✗ Face Not Recognized', 'Unknown face or match confidence below threshold.');
+  } else if (data.status === 'MODEL_MISSING') {
+    updateStatusBanner('warning', '⚠ Model Not Trained', 'Please go to Model Training to train the face model first.');
+  } else if (data.status === 'NO_FACE') {
+    // Keep scanning cleanly without flashing errors
+  }
+}
+
+function updateStatusBanner(type, title, desc) {
+  const banner = document.getElementById('liveDetectionStatus');
+  if (!banner) return;
+  banner.className = `scanner-status-banner ${type}`;
+  banner.innerHTML = `
+    <div style="font-weight: 800; font-size: 15px; letter-spacing: -0.2px;">${title}</div>
+    <div style="font-size: 13.5px; font-weight: 500; margin-top: 4px;">${desc}</div>
+  `;
+}
+
+function startServerStatusPolling() {
+  if (scanTimer) clearInterval(scanTimer);
+  scanTimer = setInterval(async () => {
+    if (!isCameraActive) return;
     try {
       const res = await fetch('/api/dashboard');
+      if (!res.ok) return;
       const data = await res.json();
-      if (data.status === 'success') {
-        const event = data.last_detection;
-        const statusBox = document.getElementById('liveDetectionStatus');
-        
-        if (event && event.message && event.status) {
-          if (event.status === 'MARKED') {
-            statusBox.className = 'scanner-status-banner success';
-            statusBox.innerHTML = `
-              <div style="font-weight: 800; font-size: 15px; letter-spacing: -0.2px;">✓ Attendance Marked</div>
-              <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${event.student.name} (${event.student.roll_no})</div>
-              <div style="font-size: 12px; color: #a7f3d0; margin-top: 2px;">Method: Face Recognition &bull; ${event.record ? event.record.time : ''}</div>
-            `;
-          } else if (event.status === 'ALREADY_MARKED') {
-            statusBox.className = 'scanner-status-banner warning';
-            statusBox.innerHTML = `
-              <div style="font-weight: 800; font-size: 15px;">⚠ Already Marked Today</div>
-              <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${event.student.name} (${event.student.roll_no})</div>
-              <div style="font-size: 12px; color: #fde68a; margin-top: 2px;">Check-in already logged for today</div>
-            `;
-          } else if (event.status === 'NOT_FOUND') {
-            statusBox.className = 'scanner-status-banner danger';
-            statusBox.innerHTML = `
-              <div style="font-weight: 800; font-size: 15px;">✗ Face Not Recognized</div>
-              <div style="font-size: 12.5px; color: #ffe4e6; margin-top: 4px;">Unknown face or confidence below threshold</div>
-            `;
-          }
-        }
+      if (data.status === 'success' && data.last_detection) {
+        handleScanResult(data.last_detection);
+      }
+    } catch (e) {
+      console.warn('Server status poll error:', e);
+    }
+  }, 1500);
+}
 
-        // Update feed table
-        const tbody = document.getElementById('faceLiveFeedTable');
-        if (tbody && data.stats.recent_records && data.stats.recent_records.length > 0) {
-          tbody.innerHTML = data.stats.recent_records.map(r => `
+async function refreshRecentRecords() {
+  try {
+    const res = await fetch('/api/attendance/today');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.status === 'success' && data.data && data.data.records) {
+      const tbody = document.getElementById('faceLiveFeedTable');
+      if (tbody) {
+        if (data.data.records.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" class="empty-state" style="padding: 20px 10px;"><p style="margin: 0;">No attendance records recorded yet today.</p></td></tr>`;
+        } else {
+          tbody.innerHTML = data.data.records.slice(0, 10).map(r => `
             <tr>
               <td style="font-weight: 600;">${r.name}</td>
               <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);">${r.roll_no}</span></td>
@@ -220,15 +400,13 @@ function startFacePolling() {
           `).join('');
         }
       }
-    } catch (e) {
-      console.warn('Face scanner poll error:', e);
     }
-  }, 2000);
+  } catch (e) {
+    console.warn('Refresh records error:', e);
+  }
 }
 
-startFacePolling();
-
-window.addEventListener('pagehide', stopFaceScanner);
-window.addEventListener('beforeunload', stopFaceScanner);
+window.addEventListener('pagehide', stopCamera);
+window.addEventListener('beforeunload', stopCamera);
 </script>
 {% endblock %}

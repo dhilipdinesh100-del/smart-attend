@@ -13,24 +13,45 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/></svg>
         Live QR Scanner Stream
       </div>
-      <div class="system-status-pill">
-        <span class="pulse-dot" id="qrPulseDot"></span>
-        <span id="qrStatusPillText">Decoder Active</span>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <div class="scanner-mode-switch" id="qrModeSwitch">
+          <button type="button" class="scanner-mode-btn active" id="modeBrowserBtn" onclick="switchQrMode('browser')">Browser Webcam</button>
+          <button type="button" class="scanner-mode-btn" id="modeServerBtn" onclick="switchQrMode('server')">Server Camera</button>
+        </div>
+        <div class="system-status-pill">
+          <span class="pulse-dot" id="qrPulseDot"></span>
+          <span id="qrStatusPillText">Initializing...</span>
+        </div>
       </div>
     </div>
 
     <!-- Centered Large Camera Viewport -->
-    <div class="scanner-viewport">
-      <img src="{{ url_for('video_feed_qr') }}" alt="QR Scanner Stream" class="scanner-video" id="qrVideoFeed">
+    <div class="scanner-viewport" id="qrScannerViewport">
+      <!-- Browser WebRTC Video (Default for Cloud / Render) -->
+      <video id="browserQrVideo" class="scanner-video" autoplay playsinline muted></video>
+
+      <!-- Server MJPEG Stream (For Local Server Mode) -->
+      <img id="qrVideoFeed" class="scanner-video" style="display: none;" alt="QR Scanner Stream">
+
+      <!-- Placeholder -->
+      <div id="qrPlaceholder" class="camera-placeholder" style="display: none;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 7h.01"/><path d="M17 7h.01"/><path d="M7 17h.01"/><path d="M17 17h.01"/></svg>
+        <div id="qrPlaceholderTitle" style="font-weight: 700; color: #ffffff; font-size: 15px;">Camera Inactive</div>
+        <div id="qrPlaceholderDesc" style="font-size: 13px; max-width: 320px;">Click "Start Camera" or use the manual entry form below.</div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="startCamera()">Enable Camera</button>
+      </div>
+
+      <!-- Hidden canvas for capturing frame snapshots -->
+      <canvas id="qrFrameCanvas" class="scanner-canvas-hidden"></canvas>
     </div>
 
     <div style="margin-top: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
       <div style="font-size: 13px; color: var(--text-muted);">Hold QR pass steadily in front of lens.</div>
       <div style="display: flex; gap: 8px;">
-        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleQrScanner" onclick="toggleQrScanner()">
+        <button type="button" class="btn btn-secondary btn-sm" id="btnToggleQrScanner" onclick="toggleCamera()">
           <span id="btnToggleQrText">Stop Camera</span>
         </button>
-        <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline btn-sm" onclick="stopQrScanner()">
+        <a href="{{ url_for('dashboard_page') }}" class="btn btn-outline btn-sm" onclick="stopCamera()">
           <span>Exit</span>
         </a>
       </div>
@@ -114,39 +135,209 @@
 </div>
 
 <script>
-let qrScannerActive = true;
-let qrPollInterval = null;
+const CSRF_TOKEN = "{{ csrf_token() }}";
+let cameraMode = 'browser'; // 'browser' or 'server'
+let isCameraActive = false;
+let mediaStream = null;
+let scanTimer = null;
+let isProcessingFrame = false;
 
-function stopQrScanner() {
-  qrScannerActive = false;
-  const feed = document.getElementById('qrVideoFeed');
-  if (feed) feed.src = '';
-  document.getElementById('qrStatusPillText').textContent = 'Camera Off';
+document.addEventListener('DOMContentLoaded', () => {
+  startCamera();
+});
+
+function switchQrMode(mode) {
+  if (cameraMode === mode) return;
+  stopCamera();
+  cameraMode = mode;
+  
+  document.getElementById('modeBrowserBtn').classList.toggle('active', mode === 'browser');
+  document.getElementById('modeServerBtn').classList.toggle('active', mode === 'server');
+  
+  startCamera();
+}
+
+async function startCamera() {
+  if (isCameraActive) return;
+  
+  const videoEl = document.getElementById('browserQrVideo');
+  const serverImg = document.getElementById('qrVideoFeed');
+  const placeholder = document.getElementById('qrPlaceholder');
+  const statusPill = document.getElementById('qrStatusPillText');
+  const dot = document.getElementById('qrPulseDot');
+  const btnToggle = document.getElementById('btnToggleQrText');
+  
+  placeholder.style.display = 'none';
+  statusPill.textContent = 'Connecting...';
+  dot.style.display = 'inline-block';
+  dot.style.background = '#fbbf24';
+  
+  if (cameraMode === 'browser') {
+    serverImg.style.display = 'none';
+    videoEl.style.display = 'block';
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCameraError('Browser Camera Not Supported', 'WebRTC camera access requires HTTPS or localhost.');
+      return;
+    }
+    
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'environment' },
+        audio: false
+      });
+      videoEl.srcObject = mediaStream;
+      await videoEl.play();
+      
+      isCameraActive = true;
+      statusPill.textContent = 'Browser Scanner Active';
+      dot.style.background = '#34d399';
+      btnToggle.textContent = 'Stop Camera';
+      
+      startBrowserQrScanning();
+    } catch (err) {
+      console.error('QR camera error:', err);
+      showCameraError('Camera Unavailable', 'Unable to access camera. Please use manual entry below.');
+    }
+  } else {
+    // Server OpenCV mode
+    videoEl.style.display = 'none';
+    serverImg.style.display = 'block';
+    serverImg.src = "{{ url_for('video_feed_qr') }}?t=" + Date.now();
+    
+    isCameraActive = true;
+    statusPill.textContent = 'Server Decoder Active';
+    dot.style.background = '#34d399';
+    btnToggle.textContent = 'Stop Camera';
+    startServerQrPolling();
+  }
+}
+
+function stopCamera() {
+  isCameraActive = false;
+  
+  if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
+  
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+  
+  const videoEl = document.getElementById('browserQrVideo');
+  if (videoEl) {
+    videoEl.srcObject = null;
+    videoEl.style.display = 'none';
+  }
+  
+  const serverImg = document.getElementById('qrVideoFeed');
+  if (serverImg) {
+    serverImg.src = '';
+    serverImg.style.display = 'none';
+  }
+  
+  document.getElementById('qrPlaceholder').style.display = 'flex';
+  document.getElementById('qrStatusPillText').textContent = 'Camera Offline';
   document.getElementById('qrPulseDot').style.display = 'none';
   document.getElementById('btnToggleQrText').textContent = 'Start Camera';
   
-  if (qrPollInterval) {
-    clearInterval(qrPollInterval);
-    qrPollInterval = null;
-  }
   fetch('/api/camera/stop', { method: 'POST', keepalive: true }).catch(() => {});
 }
 
-function startQrScanner() {
-  qrScannerActive = true;
-  const feed = document.getElementById('qrVideoFeed');
-  if (feed) feed.src = "{{ url_for('video_feed_qr') }}";
-  document.getElementById('qrStatusPillText').textContent = 'Decoder Active';
-  document.getElementById('qrPulseDot').style.display = 'inline-block';
-  document.getElementById('btnToggleQrText').textContent = 'Stop Camera';
-  startQrPolling();
+function toggleCamera() {
+  if (isCameraActive) {
+    stopCamera();
+  } else {
+    startCamera();
+  }
 }
 
-function toggleQrScanner() {
-  if (qrScannerActive) {
-    stopQrScanner();
-  } else {
-    startQrScanner();
+function showCameraError(title, desc) {
+  isCameraActive = false;
+  document.getElementById('browserQrVideo').style.display = 'none';
+  document.getElementById('qrVideoFeed').style.display = 'none';
+  
+  const placeholder = document.getElementById('qrPlaceholder');
+  placeholder.style.display = 'flex';
+  document.getElementById('qrPlaceholderTitle').textContent = title;
+  document.getElementById('qrPlaceholderDesc').textContent = desc;
+  
+  document.getElementById('qrStatusPillText').textContent = 'Offline';
+  document.getElementById('qrPulseDot').style.display = 'none';
+  document.getElementById('btnToggleQrText').textContent = 'Start Camera';
+}
+
+function startBrowserQrScanning() {
+  if (scanTimer) clearInterval(scanTimer);
+  
+  const video = document.getElementById('browserQrVideo');
+  const canvas = document.getElementById('qrFrameCanvas');
+  const ctx = canvas.getContext('2d');
+  
+  scanTimer = setInterval(async () => {
+    if (!isCameraActive || isProcessingFrame || video.readyState < 2) return;
+    
+    isProcessingFrame = true;
+    try {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+      if (!blob) {
+        isProcessingFrame = false;
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('frame', blob, 'qr_frame.jpg');
+      formData.append('csrf_token', CSRF_TOKEN);
+      
+      const response = await fetch('/api/attendance/scan-qr-frame', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRF-Token': CSRF_TOKEN }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status !== 'NO_QR') {
+          handleQrResult(data);
+        }
+      }
+    } catch (e) {
+      console.warn('QR scan frame error:', e);
+    } finally {
+      isProcessingFrame = false;
+    }
+  }, 500);
+}
+
+function handleQrResult(data) {
+  const banner = document.getElementById('qrStatusBanner');
+  if (data.status === 'MARKED' && data.student) {
+    banner.className = 'scanner-status-banner success';
+    banner.innerHTML = `
+      <div style="font-weight: 800; font-size: 15px;">✓ Student Found & Attendance Marked</div>
+      <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${data.student.name} (${data.student.roll_no})</div>
+      <div style="font-size: 12px; color: #a7f3d0; margin-top: 2px;">Method: QR Code &bull; Time: ${data.record ? data.record.time : ''}</div>
+    `;
+    refreshRecentRecords();
+  } else if (data.status === 'ALREADY_MARKED' && data.student) {
+    banner.className = 'scanner-status-banner warning';
+    banner.innerHTML = `
+      <div style="font-weight: 800; font-size: 15px;">⚠ Already Marked Today</div>
+      <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${data.student.name} (${data.student.roll_no})</div>
+      <div style="font-size: 12px; color: #fde68a; margin-top: 2px;">Attendance was already logged today</div>
+    `;
+  } else if (data.status === 'NOT_FOUND') {
+    banner.className = 'scanner-status-banner danger';
+    banner.innerHTML = `
+      <div style="font-weight: 800; font-size: 15px;">✗ Student Not Found</div>
+      <div style="font-size: 12.5px; color: #ffe4e6; margin-top: 4px;">${data.message}</div>
+    `;
   }
 }
 
@@ -162,85 +353,52 @@ async function submitQrManual() {
   try {
     const res = await fetch('/api/attendance/scan-qr', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ qr_data: val })
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF_TOKEN
+      },
+      body: JSON.stringify({ qr_data: val, csrf_token: CSRF_TOKEN })
     });
     const data = await res.json();
     input.value = '';
-
-    const banner = document.getElementById('qrStatusBanner');
-    if (data.status === 'MARKED') {
-      banner.className = 'scanner-status-banner success';
-      banner.innerHTML = `
-        <div style="font-weight: 800; font-size: 15px;">✓ Student Found & Attendance Marked</div>
-        <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${data.student.name} (${data.student.roll_no})</div>
-        <div style="font-size: 12px; color: #a7f3d0; margin-top: 2px;">Method: QR Code &bull; Time: ${data.record ? data.record.time : ''}</div>
-      `;
-      showToast(data.message, 'success');
-    } else if (data.status === 'ALREADY_MARKED') {
-      banner.className = 'scanner-status-banner warning';
-      banner.innerHTML = `
-        <div style="font-weight: 800; font-size: 15px;">⚠ Already Marked Today</div>
-        <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${data.student.name} (${data.student.roll_no})</div>
-        <div style="font-size: 12px; color: #fde68a; margin-top: 2px;">Attendance was already logged today</div>
-      `;
-      showToast(data.message, 'warning');
-    } else {
-      banner.className = 'scanner-status-banner danger';
-      banner.innerHTML = `
-        <div style="font-weight: 800; font-size: 15px;">✗ Student Not Found</div>
-        <div style="font-size: 12.5px; color: #ffe4e6; margin-top: 4px;">${data.message}</div>
-      `;
-      showToast(data.message, 'error');
-    }
+    handleQrResult(data);
   } catch (err) {
-    showToast('Failed to process QR: ' + err, 'error');
+    alert('Failed to process QR: ' + err);
   } finally {
     btn.disabled = false;
     btn.classList.remove('loading');
   }
 }
 
-function startQrPolling() {
-  if (qrPollInterval) clearInterval(qrPollInterval);
-
-  qrPollInterval = setInterval(async () => {
-    if (!qrScannerActive) return;
+function startServerQrPolling() {
+  if (scanTimer) clearInterval(scanTimer);
+  scanTimer = setInterval(async () => {
+    if (!isCameraActive) return;
     try {
       const res = await fetch('/api/dashboard');
+      if (!res.ok) return;
       const data = await res.json();
-      if (data.status === 'success') {
-        const event = data.last_detection;
-        const banner = document.getElementById('qrStatusBanner');
-        
-        if (event && event.message && event.status) {
-          if (event.status === 'MARKED') {
-            banner.className = 'scanner-status-banner success';
-            banner.innerHTML = `
-              <div style="font-weight: 800; font-size: 15px;">✓ Student Found & Attendance Marked</div>
-              <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${event.student.name} (${event.student.roll_no})</div>
-              <div style="font-size: 12px; color: #a7f3d0; margin-top: 2px;">Method: QR Code &bull; Time: ${event.record ? event.record.time : ''}</div>
-            `;
-          } else if (event.status === 'ALREADY_MARKED') {
-            banner.className = 'scanner-status-banner warning';
-            banner.innerHTML = `
-              <div style="font-weight: 800; font-size: 15px;">⚠ Already Marked Today</div>
-              <div style="font-size: 14px; font-weight: 600; color: #ffffff; margin-top: 4px;">${event.student.name} (${event.student.roll_no})</div>
-              <div style="font-size: 12px; color: #fde68a; margin-top: 2px;">Attendance was already logged today</div>
-            `;
-          } else if (event.status === 'NOT_FOUND') {
-            banner.className = 'scanner-status-banner danger';
-            banner.innerHTML = `
-              <div style="font-weight: 800; font-size: 15px;">✗ Student Not Found</div>
-              <div style="font-size: 12.5px; color: #ffe4e6; margin-top: 4px;">${event.message}</div>
-            `;
-          }
-        }
+      if (data.status === 'success' && data.last_detection) {
+        handleQrResult(data.last_detection);
+      }
+    } catch (e) {
+      console.warn('QR poll error:', e);
+    }
+  }, 1500);
+}
 
-        // Update feed table
-        const tbody = document.getElementById('qrLiveFeedTable');
-        if (tbody && data.stats.recent_records && data.stats.recent_records.length > 0) {
-          tbody.innerHTML = data.stats.recent_records.map(r => `
+async function refreshRecentRecords() {
+  try {
+    const res = await fetch('/api/attendance/today');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.status === 'success' && data.data && data.data.records) {
+      const tbody = document.getElementById('qrLiveFeedTable');
+      if (tbody) {
+        if (data.data.records.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="4" class="empty-state" style="padding: 20px 10px;"><p style="margin: 0;">No QR attendance logs recorded yet today.</p></td></tr>`;
+        } else {
+          tbody.innerHTML = data.data.records.slice(0, 10).map(r => `
             <tr>
               <td style="font-weight: 600;">${r.name}</td>
               <td><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-muted);">${r.roll_no}</span></td>
@@ -250,15 +408,13 @@ function startQrPolling() {
           `).join('');
         }
       }
-    } catch (e) {
-      console.warn('QR poll error:', e);
     }
-  }, 2000);
+  } catch (e) {
+    console.warn('Refresh records error:', e);
+  }
 }
 
-startQrPolling();
-
-window.addEventListener('pagehide', stopQrScanner);
-window.addEventListener('beforeunload', stopQrScanner);
+window.addEventListener('pagehide', stopCamera);
+window.addEventListener('beforeunload', stopCamera);
 </script>
 {% endblock %}

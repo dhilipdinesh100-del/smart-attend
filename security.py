@@ -196,3 +196,66 @@ def validate_admin_password(password: str, confirm_password: Optional[str] = Non
     if confirm_password is not None and password != confirm_password:
         return False, "Passwords do not match."
     return True, ""
+
+def validate_uploaded_image(file_or_data: Any, max_size_bytes: int = 5 * 1024 * 1024) -> Tuple[bool, Optional[np.ndarray], str]:
+    """
+    Validate and decode uploaded image from FileStorage, bytes, or Base64 data string.
+    Enforces maximum size (5MB), checks for valid image payload, and decodes with OpenCV.
+    Returns (is_valid, decoded_bgr_image, error_message).
+    """
+    import base64
+    import cv2
+    import numpy as np
+
+    if file_or_data is None:
+        return False, None, "No image payload provided."
+
+    image_bytes = None
+
+    # 1. Base64 string
+    if isinstance(file_or_data, str):
+        data_str = file_or_data.strip()
+        if not data_str:
+            return False, None, "Empty image data provided."
+        if data_str.startswith("data:"):
+            parts = data_str.split(",", 1)
+            if len(parts) == 2:
+                data_str = parts[1]
+        try:
+            image_bytes = base64.b64decode(data_str)
+        except Exception as e:
+            return False, None, f"Invalid base64 encoded image: {e}"
+
+    # 2. Bytes
+    elif isinstance(file_or_data, bytes):
+        image_bytes = file_or_data
+
+    # 3. FileStorage / IO stream
+    elif hasattr(file_or_data, "read"):
+        try:
+            image_bytes = file_or_data.read()
+        except Exception as e:
+            return False, None, f"Could not read uploaded image stream: {e}"
+    else:
+        return False, None, "Unsupported image data format."
+
+    if not image_bytes or len(image_bytes) == 0:
+        return False, None, "Uploaded image file is empty."
+
+    if len(image_bytes) > max_size_bytes:
+        return False, None, f"Uploaded image exceeds maximum allowed size of {max_size_bytes // (1024 * 1024)}MB."
+
+    try:
+        np_arr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if img is None or img.size == 0:
+            return False, None, "Failed to decode image. Invalid or corrupted image format."
+        
+        h, w = img.shape[:2]
+        if h < 20 or w < 20:
+            return False, None, "Image resolution too small for facial recognition."
+            
+        return True, img, ""
+    except Exception as e:
+        return False, None, f"Image processing error: {str(e)}"
+

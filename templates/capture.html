@@ -6,22 +6,46 @@
 
 {% block content %}
 <div class="dashboard-grid-2">
-  <!-- Left Column: Camera Viewport -->
+  <!-- Left Column: Camera Viewport & Controls -->
   <div class="card">
     <div class="card-header">
       <div class="card-title">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
         Live Facial Camera Feed
       </div>
-      <div class="system-status-pill">
-        <span class="pulse-dot"></span>
-        <span id="sensorStatusText">Sensor Active</span>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <div class="scanner-mode-switch" id="captureModeSwitch">
+          <button type="button" class="scanner-mode-btn active" id="modeBrowserBtn" onclick="switchCaptureMode('browser')">Browser Webcam</button>
+          <button type="button" class="scanner-mode-btn" id="modeServerBtn" onclick="switchCaptureMode('server')">Server Camera</button>
+        </div>
+        <div class="system-status-pill">
+          <span class="pulse-dot" id="sensorPulseDot"></span>
+          <span id="sensorStatusText">Initializing...</span>
+        </div>
       </div>
     </div>
 
     <!-- Scanner Viewport -->
-    <div class="scanner-viewport" style="margin-bottom: 20px;">
-      <img src="{{ url_for('video_feed_capture', student_id=student.id) }}" alt="Camera Stream" class="scanner-video" id="captureFeed">
+    <div class="scanner-viewport" id="captureViewport" style="margin-bottom: 20px;">
+      <!-- Browser WebRTC Video (Default for Cloud / Render) -->
+      <video id="browserCaptureVideo" class="scanner-video" autoplay playsinline muted></video>
+
+      <!-- Server MJPEG Stream (For Local Server Mode) -->
+      <img id="captureFeed" class="scanner-video" style="display: none;" alt="Camera Stream">
+
+      <!-- Placeholder -->
+      <div id="capturePlaceholder" class="camera-placeholder" style="display: none;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <div id="capturePlaceholderTitle" style="font-weight: 700; color: #ffffff; font-size: 15px;">Camera Inactive</div>
+        <div id="capturePlaceholderDesc" style="font-size: 13px; max-width: 320px;">Please grant webcam permission to capture face samples.</div>
+        <button type="button" class="btn btn-primary btn-sm" onclick="startCamera()">Enable Camera</button>
+      </div>
+
+      <!-- Face Alignment Guide Overlay -->
+      <div class="camera-guide-overlay" id="captureGuideOverlay"></div>
+
+      <!-- Hidden canvas for capturing frame snapshots -->
+      <canvas id="captureCanvas" class="scanner-canvas-hidden"></canvas>
     </div>
 
     <!-- Capture Action Controls -->
@@ -30,15 +54,18 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 14"/></svg>
         <span id="btnCaptureText">Start Capture ({{ target_samples }} Samples)</span>
       </button>
-      <button type="button" class="btn btn-secondary" id="btnStopCamera" onclick="stopCameraSession()">
+      <button type="button" class="btn btn-secondary" id="btnStopCamera" onclick="stopCamera()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-        <span>Stop Camera</span>
+        <span id="btnStopCameraText">Stop Camera</span>
       </button>
-      <a href="{{ url_for('train_model_page') }}" class="btn btn-success" onclick="stopCameraSession()">
+      <button type="button" class="btn btn-danger btn-sm" id="btnResetDataset" onclick="resetDataset()">
+        <span>Reset Dataset</span>
+      </button>
+      <a href="{{ url_for('train_model_page') }}" class="btn btn-success" id="btnTrainModel" onclick="stopCamera()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>
         <span>Train Model &rarr;</span>
       </a>
-      <a href="{{ url_for('student_detail_page', student_id=student.id) }}" class="btn btn-outline" onclick="stopCameraSession()">
+      <a href="{{ url_for('student_detail_page', student_id=student.id) }}" class="btn btn-outline" onclick="stopCamera()">
         <span>Back</span>
       </a>
     </div>
@@ -91,8 +118,8 @@
 
         <div id="captureStatusBox" class="scanner-status-banner {% if sample_count >= target_samples %}success{% endif %}">
           {% if sample_count >= target_samples %}
-            <strong>✓ Face dataset captured successfully.</strong>
-            <div style="font-size: 12.5px; margin-top: 4px; color: var(--text-secondary);">Dataset is ready for model compilation.</div>
+            <div style="font-weight: 700; color: #34d399;">✓ Face dataset captured successfully.</div>
+            <div style="font-size: 12.5px; margin-top: 4px; color: var(--text-secondary);">Dataset is complete and ready for model training.</div>
           {% else %}
             Position student in front of the camera, ensure balanced lighting, then click "Start Capture".
           {% endif %}
@@ -103,88 +130,302 @@
 </div>
 
 <script>
-let capturePollingInterval = null;
+const CSRF_TOKEN = "{{ csrf_token() }}";
+const STUDENT_ID = {{ student.id }};
+const TARGET_SAMPLES = {{ target_samples }};
 
-async function startCaptureSession() {
-  const btn = document.getElementById('btnStartCapture');
-  const btnText = document.getElementById('btnCaptureText');
-  const statusBox = document.getElementById('captureStatusBox');
-  const feed = document.getElementById('captureFeed');
-  
-  if (!feed.src || feed.src.endsWith('#') || feed.src === window.location.href) {
-    feed.src = "{{ url_for('video_feed_capture', student_id=student.id) }}";
-  }
-  
-  btn.disabled = true;
-  btn.classList.add('loading');
-  btnText.textContent = 'Capturing face samples...';
-  statusBox.className = 'scanner-status-banner warning';
-  statusBox.innerHTML = '<strong>Capturing face samples...</strong><div style="font-size:12.5px; margin-top:4px;">Keep face steady and slowly tilt slightly.</div>';
+let cameraMode = 'browser'; // 'browser' or 'server'
+let isCameraActive = false;
+let isCapturing = false;
+let mediaStream = null;
+let captureTimer = null;
+let currentSampleCount = {{ sample_count }};
 
-  try {
-    const res = await fetch('/api/capture/start/{{ student.id }}', { method: 'POST' });
-    const data = await res.json();
-    if (data.success) {
-      showToast('Capture started. Collecting facial samples...', 'info');
-      startStatusPolling();
-    }
-  } catch (err) {
-    showToast('Failed to start capture: ' + err, 'error');
-    btn.disabled = false;
-    btn.classList.remove('loading');
-    btnText.textContent = 'Start Capture ({{ target_samples }} Samples)';
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  startCamera();
+});
+
+function switchCaptureMode(mode) {
+  if (cameraMode === mode) return;
+  stopCamera();
+  cameraMode = mode;
+  
+  document.getElementById('modeBrowserBtn').classList.toggle('active', mode === 'browser');
+  document.getElementById('modeServerBtn').classList.toggle('active', mode === 'server');
+  
+  startCamera();
 }
 
-function startStatusPolling() {
-  if (capturePollingInterval) clearInterval(capturePollingInterval);
-
-  capturePollingInterval = setInterval(async () => {
+async function startCamera() {
+  if (isCameraActive) return;
+  
+  const videoEl = document.getElementById('browserCaptureVideo');
+  const serverImg = document.getElementById('captureFeed');
+  const placeholder = document.getElementById('capturePlaceholder');
+  const overlay = document.getElementById('captureGuideOverlay');
+  const statusPill = document.getElementById('sensorStatusText');
+  const dot = document.getElementById('sensorPulseDot');
+  const btnStop = document.getElementById('btnStopCameraText');
+  
+  placeholder.style.display = 'none';
+  overlay.style.display = 'block';
+  statusPill.textContent = 'Connecting...';
+  dot.style.display = 'inline-block';
+  dot.style.background = '#fbbf24';
+  
+  if (cameraMode === 'browser') {
+    serverImg.style.display = 'none';
+    videoEl.style.display = 'block';
+    
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCameraError('Browser Camera Not Supported', 'WebRTC camera access requires HTTPS or localhost.');
+      return;
+    }
+    
     try {
-      const res = await fetch('/api/capture/status/{{ student.id }}');
-      const data = await res.json();
-
-      const count = data.sample_count;
-      const target = data.target_samples;
-      const pct = Math.min(100, Math.round((count / target) * 100));
-
-      document.getElementById('sampleCountDisplay').textContent = `${count} / ${target}`;
-      document.getElementById('captureProgressBar').style.width = `${pct}%`;
-
-      if (data.completed || count >= target) {
-        clearInterval(capturePollingInterval);
-        const statusBox = document.getElementById('captureStatusBox');
-        statusBox.className = 'scanner-status-banner success';
-        statusBox.innerHTML = '<strong>✓ Face dataset captured successfully.</strong><div style="font-size:12.5px; margin-top:4px;">Camera stopped. You can now proceed to Train Model.</div>';
-        
-        const btn = document.getElementById('btnStartCapture');
-        btn.disabled = false;
-        btn.classList.remove('loading');
-        document.getElementById('btnCaptureText').textContent = 'Re-capture Samples';
-        showToast('Face dataset captured successfully!', 'success');
-        stopCameraSession();
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: 'user' },
+        audio: false
+      });
+      videoEl.srcObject = mediaStream;
+      await videoEl.play();
+      
+      isCameraActive = true;
+      statusPill.textContent = 'Browser Camera Active';
+      dot.style.background = '#34d399';
+      btnStop.textContent = 'Stop Camera';
+    } catch (err) {
+      console.error('Camera access error:', err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        showCameraError('Permission Denied', 'Camera permission was denied in your browser settings.');
+      } else {
+        showCameraError('Camera Unavailable', 'Unable to access webcam device.');
       }
-    } catch (e) {
-      console.warn('Status poll error:', e);
     }
-  }, 1000);
+  } else {
+    // Server OpenCV mode
+    videoEl.style.display = 'none';
+    serverImg.style.display = 'block';
+    serverImg.src = "{{ url_for('video_feed_capture', student_id=student.id) }}?t=" + Date.now();
+    
+    isCameraActive = true;
+    statusPill.textContent = 'Server Camera Active';
+    dot.style.background = '#34d399';
+    btnStop.textContent = 'Stop Camera';
+  }
 }
 
-function stopCameraSession() {
-  if (capturePollingInterval) {
-    clearInterval(capturePollingInterval);
-    capturePollingInterval = null;
+function stopCamera() {
+  isCameraActive = false;
+  isCapturing = false;
+  
+  if (captureTimer) {
+    clearInterval(captureTimer);
+    captureTimer = null;
   }
-  const feed = document.getElementById('captureFeed');
-  if (feed) {
-    feed.src = '';
+  
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
   }
-  document.getElementById('sensorStatusText').textContent = 'Camera Off';
+  
+  const videoEl = document.getElementById('browserCaptureVideo');
+  if (videoEl) {
+    videoEl.srcObject = null;
+    videoEl.style.display = 'none';
+  }
+  
+  const serverImg = document.getElementById('captureFeed');
+  if (serverImg) {
+    serverImg.src = '';
+    serverImg.style.display = 'none';
+  }
+  
+  document.getElementById('captureGuideOverlay').style.display = 'none';
+  document.getElementById('capturePlaceholder').style.display = 'flex';
+  document.getElementById('capturePlaceholderTitle').textContent = 'Camera Inactive';
+  document.getElementById('capturePlaceholderDesc').textContent = 'Webcam stream is stopped.';
+  document.getElementById('sensorStatusText').textContent = 'Camera Offline';
+  document.getElementById('sensorPulseDot').style.display = 'none';
+  document.getElementById('btnStopCameraText').textContent = 'Start Camera';
+  document.getElementById('btnCaptureText').textContent = `Start Capture (${TARGET_SAMPLES} Samples)`;
+  document.getElementById('btnStartCapture').disabled = false;
+  
   fetch('/api/camera/stop', { method: 'POST', keepalive: true }).catch(() => {});
 }
 
-// Page exit lifecycle cleanup
-window.addEventListener('pagehide', stopCameraSession);
-window.addEventListener('beforeunload', stopCameraSession);
+function showCameraError(title, desc) {
+  isCameraActive = false;
+  document.getElementById('browserCaptureVideo').style.display = 'none';
+  document.getElementById('captureFeed').style.display = 'none';
+  document.getElementById('captureGuideOverlay').style.display = 'none';
+  
+  const placeholder = document.getElementById('capturePlaceholder');
+  placeholder.style.display = 'flex';
+  document.getElementById('capturePlaceholderTitle').textContent = title;
+  document.getElementById('capturePlaceholderDesc').textContent = desc;
+  
+  document.getElementById('sensorStatusText').textContent = 'Error';
+  document.getElementById('sensorPulseDot').style.display = 'inline-block';
+  document.getElementById('sensorPulseDot').style.background = '#fb7185';
+}
+
+function startCaptureSession() {
+  if (!isCameraActive) {
+    startCamera().then(() => {
+      if (isCameraActive) beginCapturing();
+    });
+  } else {
+    beginCapturing();
+  }
+}
+
+function beginCapturing() {
+  if (isCapturing) return;
+  isCapturing = true;
+  
+  const btnCapture = document.getElementById('btnStartCapture');
+  const btnText = document.getElementById('btnCaptureText');
+  btnCapture.disabled = true;
+  btnText.textContent = 'Capturing Face Samples...';
+  
+  if (cameraMode === 'browser') {
+    startBrowserCaptureLoop();
+  } else {
+    startServerCaptureLoop();
+  }
+}
+
+function startBrowserCaptureLoop() {
+  const video = document.getElementById('browserCaptureVideo');
+  const canvas = document.getElementById('captureCanvas');
+  const ctx = canvas.getContext('2d');
+  const guide = document.getElementById('captureGuideOverlay');
+  
+  if (captureTimer) clearInterval(captureTimer);
+  
+  let inFlight = false;
+  captureTimer = setInterval(async () => {
+    if (!isCapturing || inFlight || video.readyState < 2) return;
+    
+    inFlight = true;
+    try {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+      if (!blob) {
+        inFlight = false;
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append('student_id', STUDENT_ID);
+      formData.append('frame', blob, 'capture.jpg');
+      formData.append('csrf_token', CSRF_TOKEN);
+      
+      const res = await fetch('/api/capture/frame', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRF-Token': CSRF_TOKEN }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.face_detected) {
+          if (guide) guide.classList.add('detected');
+          setTimeout(() => { if (guide) guide.classList.remove('detected'); }, 150);
+        }
+        
+        updateProgress(data.sample_count, data.target_samples, data.message);
+        
+        if (data.completed || data.sample_count >= TARGET_SAMPLES) {
+          clearInterval(captureTimer);
+          captureTimer = null;
+          isCapturing = false;
+          onCaptureComplete();
+        }
+      }
+    } catch (e) {
+      console.warn('Capture error:', e);
+    } finally {
+      inFlight = false;
+    }
+  }, 220);
+}
+
+function startServerCaptureLoop() {
+  fetch(`/api/capture/start/${STUDENT_ID}`, {
+    method: 'POST',
+    headers: { 'X-CSRF-Token': CSRF_TOKEN }
+  }).catch(() => {});
+  
+  if (captureTimer) clearInterval(captureTimer);
+  captureTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/api/capture/status/${STUDENT_ID}`);
+      if (res.ok) {
+        const data = await res.json();
+        updateProgress(data.sample_count, data.target_samples, `Captured ${data.sample_count}/${data.target_samples} samples`);
+        if (data.completed || data.sample_count >= TARGET_SAMPLES) {
+          clearInterval(captureTimer);
+          captureTimer = null;
+          isCapturing = false;
+          onCaptureComplete();
+        }
+      }
+    } catch (e) {
+      console.warn('Server status poll error:', e);
+    }
+  }, 400);
+}
+
+function updateProgress(count, target, msg) {
+  currentSampleCount = count;
+  document.getElementById('sampleCountDisplay').textContent = `${count} / ${target}`;
+  const pct = Math.min(100, Math.round((count / target) * 100));
+  document.getElementById('captureProgressBar').style.width = `${pct}%`;
+  
+  const statusBox = document.getElementById('captureStatusBox');
+  if (count >= target) {
+    statusBox.className = 'scanner-status-banner success';
+    statusBox.innerHTML = `
+      <div style="font-weight: 700; color: #34d399;">✓ Face dataset captured successfully (${count}/${target}).</div>
+      <div style="font-size: 12.5px; margin-top: 4px; color: var(--text-secondary);">All biometric samples registered. Ready for model compilation.</div>
+    `;
+  } else {
+    statusBox.className = 'scanner-status-banner';
+    statusBox.innerHTML = `<div>${msg || `Capturing sample ${count}/${target}...`}</div>`;
+  }
+}
+
+function onCaptureComplete() {
+  const btnCapture = document.getElementById('btnStartCapture');
+  const btnText = document.getElementById('btnCaptureText');
+  btnCapture.disabled = false;
+  btnText.textContent = 'Capture Completed ✓';
+}
+
+async function resetDataset() {
+  if (!confirm('Are you sure you want to reset all face samples for this student?')) return;
+  
+  try {
+    const res = await fetch(`/api/capture/reset/${STUDENT_ID}`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': CSRF_TOKEN }
+    });
+    if (res.ok) {
+      updateProgress(0, TARGET_SAMPLES, 'Dataset reset. Ready to capture fresh samples.');
+      document.getElementById('btnCaptureText').textContent = `Start Capture (${TARGET_SAMPLES} Samples)`;
+      document.getElementById('btnStartCapture').disabled = false;
+    }
+  } catch (e) {
+    alert('Failed to reset dataset: ' + e.message);
+  }
+}
+
+window.addEventListener('pagehide', stopCamera);
+window.addEventListener('beforeunload', stopCamera);
 </script>
 {% endblock %}

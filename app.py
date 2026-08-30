@@ -901,20 +901,156 @@ def api_stop_camera():
     camera_manager.stop_capture_session()
     return jsonify({"success": True, "message": "Camera stopped and released."})
 
+@app.route("/api/face/scan-frame", methods=["POST"])
+@security.login_required
+def api_scan_face_frame():
+    """
+    Cloud-compatible face recognition endpoint.
+    Processes browser webcam frames, detects face ROI, runs LBPH recognition, and logs attendance.
+    """
+    file_or_data = None
+    if "frame" in request.files:
+        file_or_data = request.files["frame"]
+    elif "image" in request.files:
+        file_or_data = request.files["image"]
+    elif request.is_json:
+        payload = request.get_json(silent=True) or {}
+        file_or_data = payload.get("frame") or payload.get("image")
+    elif request.form.get("frame") or request.form.get("image"):
+        file_or_data = request.form.get("frame") or request.form.get("image")
+
+    if not file_or_data:
+        return jsonify({"success": False, "status": "ERROR", "message": "No frame image payload provided."}), 400
+
+    is_valid, img, err = security.validate_uploaded_image(file_or_data)
+    if not is_valid or img is None:
+        return jsonify({"success": False, "status": "INVALID_IMAGE", "message": err or "Invalid image."}), 400
+
+    # Check if model exists
+    if not MODEL_PATH.exists():
+        return jsonify({
+            "success": False,
+            "status": "MODEL_MISSING",
+            "message": "Face model is not trained yet. Please train the model in Model Training."
+        }), 200
+
+    # Detect faces
+    bboxes = face_engine.detect_faces(img)
+    if not bboxes:
+        return jsonify({
+            "success": False,
+            "status": "NO_FACE",
+            "message": "No face detected in camera frame. Please face the camera directly."
+        }), 200
+
+    # Extract ROI from primary face bounding box
+    face_roi = face_engine.extract_face_roi(img, bboxes[0])
+    pred_id, conf, is_match = face_engine.recognize_face(face_roi)
+
+    if is_match and pred_id is not None:
+        result = face_engine.process_face_attendance_event(pred_id)
+        return jsonify({
+            "success": result["success"],
+            "status": result["status"],
+            "message": result["message"],
+            "student": result.get("student"),
+            "record": result.get("record"),
+            "confidence": round(float(conf), 2)
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "status": "NOT_FOUND",
+            "message": "Face not recognized or match confidence too low.",
+            "confidence": round(float(conf), 2)
+        }), 200
+
+@app.route("/api/capture/frame", methods=["POST"])
+@app.route("/api/capture/frame/<int:student_id>", methods=["POST"])
+@security.login_required
+def api_capture_frame(student_id: Optional[int] = None):
+    """
+    Cloud-compatible face dataset capture endpoint.
+    Accepts browser webcam snapshot, extracts normalized 200x200 grayscale face ROI, and saves sample.
+    """
+    sid_val = student_id or request.form.get("student_id")
+    if sid_val is None and request.is_json:
+        payload = request.get_json(silent=True) or {}
+        sid_val = payload.get("student_id")
+
+    if not sid_val:
+        return jsonify({"success": False, "message": "student_id is required."}), 400
+
+    try:
+        sid = int(sid_val)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "message": "Invalid student_id. Expected integer."}), 400
+
+    student = database.get_student_by_id(sid)
+    if not student:
+        return jsonify({"success": False, "message": f"Student ID #{sid} not found in database."}), 404
+
+    file_or_data = None
+    if "frame" in request.files:
+        file_or_data = request.files["frame"]
+    elif "image" in request.files:
+        file_or_data = request.files["image"]
+    elif request.is_json:
+        payload = request.get_json(silent=True) or {}
+        file_or_data = payload.get("frame") or payload.get("image")
+    elif request.form.get("frame") or request.form.get("image"):
+        file_or_data = request.form.get("frame") or request.form.get("image")
+
+    if not file_or_data:
+        return jsonify({"success": False, "message": "No frame image payload provided."}), 400
+
+    is_valid, img, err = security.validate_uploaded_image(file_or_data)
+    if not is_valid or img is None:
+        return jsonify({"success": False, "message": err or "Invalid image."}), 400
+
+    target = int(database.get_setting("samples_per_student", "30"))
+    current_count = face_engine.get_student_sample_count(sid)
+
+    bboxes = face_engine.detect_faces(img)
+    if not bboxes:
+        return jsonify({
+            "success": False,
+            "face_detected": False,
+            "sample_count": current_count,
+            "target_samples": target,
+            "completed": current_count >= target,
+            "message": "No face detected in camera frame. Please align student's face with the camera."
+        }), 200
+
+    face_roi = face_engine.extract_face_roi(img, bboxes[0])
+    if current_count < target:
+        _, new_count, _ = face_engine.save_face_sample(sid, face_roi)
+    else:
+        new_count = current_count
+
+    return jsonify({
+        "success": True,
+        "face_detected": True,
+        "sample_count": new_count,
+        "target_samples": target,
+        "completed": new_count >= target,
+        "message": f"Sample {new_count}/{target} captured successfully."
+    })
+
 @app.route("/api/capture/upload/<int:student_id>", methods=["POST"])
 @security.login_required
 def api_upload_face_sample(student_id: int):
-    if "image" not in request.files:
+    student = database.get_student_by_id(student_id)
+    if not student:
+        return jsonify({"success": False, "message": f"Student ID #{student_id} not found."}), 404
+
+    file_or_data = request.files.get("image") or request.files.get("frame")
+    if not file_or_data:
         return jsonify({"success": False, "message": "No image file uploaded."}), 400
         
-    file = request.files["image"]
-    import cv2
-    import numpy as np
-    file_bytes = np.frombuffer(file.read(), np.uint8)
-    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    
-    if img is None:
-        return jsonify({"success": False, "message": "Invalid image format."}), 400
+    is_valid, img, err = security.validate_uploaded_image(file_or_data)
+    if not is_valid or img is None:
+        return jsonify({"success": False, "message": err or "Invalid image format."}), 400
         
     bboxes = face_engine.detect_faces(img)
     if not bboxes:
@@ -928,6 +1064,39 @@ def api_upload_face_sample(student_id: int):
         "message": f"Face sample saved. Total: {count}",
         "sample_count": count
     })
+
+@app.route("/api/attendance/scan-qr-frame", methods=["POST"])
+@security.login_required
+def api_scan_qr_frame():
+    """
+    Cloud-compatible QR scanner frame decoding endpoint.
+    """
+    file_or_data = None
+    if "frame" in request.files:
+        file_or_data = request.files["frame"]
+    elif "image" in request.files:
+        file_or_data = request.files["image"]
+    elif request.is_json:
+        payload = request.get_json(silent=True) or {}
+        file_or_data = payload.get("frame") or payload.get("image")
+    elif request.form.get("frame") or request.form.get("image"):
+        file_or_data = request.form.get("frame") or request.form.get("image")
+
+    if not file_or_data:
+        return jsonify({"success": False, "status": "ERROR", "message": "No frame image payload provided."}), 400
+
+    is_valid, img, err = security.validate_uploaded_image(file_or_data)
+    if not is_valid or img is None:
+        return jsonify({"success": False, "status": "INVALID_IMAGE", "message": err or "Invalid image."}), 400
+
+    import cv2
+    detector = cv2.QRCodeDetector()
+    data, bbox, _ = detector.detectAndDecode(img)
+    if data:
+        result = qr_engine.process_qr_attendance(data)
+        return jsonify(result)
+    else:
+        return jsonify({"success": False, "status": "NO_QR", "message": "No valid QR code detected in frame."})
 
 @app.route("/api/train", methods=["POST"])
 @security.login_required
