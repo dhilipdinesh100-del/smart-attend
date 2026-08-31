@@ -59,16 +59,37 @@ function initMobileSidebar() {
   const toggleBtn = document.getElementById('mobileMenuBtn');
   const sidebar = document.querySelector('.sidebar');
   const backdrop = document.getElementById('sidebarBackdrop');
+  const navLinks = document.querySelectorAll('.nav-link');
 
   if (toggleBtn && sidebar && backdrop) {
     toggleBtn.addEventListener('click', () => {
-      sidebar.classList.toggle('open');
-      backdrop.classList.toggle('active');
+      const isOpen = sidebar.classList.toggle('open');
+      backdrop.classList.toggle('active', isOpen);
+      toggleBtn.setAttribute('aria-expanded', String(isOpen));
     });
 
     backdrop.addEventListener('click', () => {
       sidebar.classList.remove('open');
       backdrop.classList.remove('active');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+    });
+
+    navLinks.forEach(link => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 860) {
+          sidebar.classList.remove('open');
+          backdrop.classList.remove('active');
+          toggleBtn.setAttribute('aria-expanded', 'false');
+        }
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 860) {
+        sidebar.classList.remove('open');
+        backdrop.classList.remove('active');
+        toggleBtn.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 }
